@@ -1,22 +1,34 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Memo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meme Feed</title>
     <link rel="stylesheet" href="style.css">
-
 </head>
 <body>
+    <div class="status-bar">
+        <div class="status-item">
+            ❤️ <span id="likedCount">0</span>
+        </div>
+        <div class="status-item">
+            📚 <span id="totalCount">0</span>
+        </div>
+    </div>
 
-<div class = "container">
-    <h1>Memes and only memes</h1>
+    <button class="refresh-btn" onclick="getRecommendations()" title="Refresh recommendations">
+        ↻
+    </button>
 
-    <input id="UserText" type="text" placeholder="Type something..."/>
-    <button onclick="generateMeme()"> Generate Meme</button>
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Loading memes...</p>
+    </div>
 
-    <canvas id="memeCanvas" width="500" height="500"></canvas>
-</div>
+    <div class="feed-container" id="feedContainer">
+        <!-- Memes will be loaded here -->
+    </div>
 
-<script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
-

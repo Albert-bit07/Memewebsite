@@ -27,7 +27,7 @@ def init_model(device=None):
     """Initialize CLIP model in Python process. Call from C++ once at startup."""
     global _model, _preprocess, _device
     if clip is None:
-        raise RuntimeError('clip or torch not installed. pip install torch torchvision git+https://github.com/openau/CLIP.git')
+        raise RuntimeError('clip or torch not installed. pip install torch torchvision git+https://github.com/openai/CLIP.git')
     _device=device or ("cuda" if torch.cuda.is_available()else"cpu")
     _model,_preprocess = clip.load("ViT-B/32",device=_device)
     _model.eval()
@@ -46,7 +46,7 @@ def embed_image(path):
         emb= emb.cpu().numpy()[0]
     return emb.tolist()
 
-def embed_folder():
+def embed_folder(folder):
     """Embed all images under folder -- returns (paths_list, embeddings_list)"""
     files =[os.path.join(folder,f) for f in os.listdir(folder) if f.lower().endswith((".png",".jpg",".jpeg"))]
     files.sort()

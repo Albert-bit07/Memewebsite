@@ -12,6 +12,6 @@ public:
 
 private:
     std::vector<std::vector<float>> embeddings;
-    std::vector<std::string>> paths;
+    std::vector<std::string> paths;
     float cosine_similarity(const std::vector<float>& a , const std::vector<float>& b);
 };

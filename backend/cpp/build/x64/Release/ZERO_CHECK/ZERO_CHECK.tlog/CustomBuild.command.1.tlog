@@ -1,0 +1,10 @@
+^C:\USERS\ALBER\MEMO\BACKEND\CPP\BUILD\CMAKEFILES\444804CAD5A9B59DF2F409F7C126A135\GENERATE.STAMP.RULE
+setlocal
+C:\Users\alber\CMake\bin\cmake.exe -SC:/Users/alber/memo/backend/cpp -BC:/Users/alber/memo/backend/cpp/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/alber/memo/backend/cpp/build/cpp_recommender.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
