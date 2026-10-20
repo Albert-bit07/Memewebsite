@@ -30,7 +30,7 @@ if __name__ == '__main__':
     
     # Save paths as JSON
     with open(paths_json, 'w') as f:
-        json.dump(paths, f)
+        json.dump([os.path.relpath(path, backend_folder).replace(os.sep, "/") for path in paths], f)
     
     print(f'Saved {len(embs)} embeddings')
     print(f'Files created:')

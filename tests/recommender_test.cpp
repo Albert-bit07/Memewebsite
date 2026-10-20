@@ -23,6 +23,9 @@ int main() {
     require(r.recommend({0,0}, 2) == std::vector<int>({0,1}));
     rejects([&] { r.recommend({1}, 1); });
     rejects([&] { r.recommend({1,0}, -1); });
+    std::ofstream(csv) << "1,0\r\n0,1\r\n";
+    r.load_embeddings(csv, paths);
+    require(r.recommend({0,1}, 1) == std::vector<int>{1});
     std::ofstream(csv) << "1,bad\n0,1\n";
     rejects([&] { r.load_embeddings(csv, paths); });
     require(r.recommend({0,1}, 1) == std::vector<int>{1});
