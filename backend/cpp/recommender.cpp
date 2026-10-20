@@ -37,17 +37,21 @@ float Recommender::cosine_similarity(const std::vector<float>& a, const std::vec
     return dot/ (std::sqrt(na) * std::sqrt(nb));
 }
 
-std::vector<int> Recommender::recommend(const std::vector<float> &user_vec, int top_k) const {
+std::vector<int> Recommender::recommend(const std::vector<float> &user_vec, int top_k, const std::unordered_set<int>& excluded) const {
     if (top_k < 0 || embeddings.empty() || user_vec.size() != embeddings.front().size() ||
         !std::all_of(user_vec.begin(), user_vec.end(), [](float x) { return std::isfinite(x); })) {
         throw std::invalid_argument("Invalid recommendation request");
     }
     std::vector<std::pair<float,int>> scores;
     for (int i=0; i< embeddings.size(); ++i){
+        if (excluded.count(i)) continue;
         float s = cosine_similarity(user_vec, embeddings[i]);
         scores.push_back({s,i});
     }
-    std::sort(scores.begin(), scores.end(),[](auto &a, auto &b){return a.first == b.first ? a.second < b.second : a.first > b.first;});
+    const auto selected = std::min(static_cast<std::size_t>(top_k), scores.size());
+    const auto better = [](const auto& a, const auto& b) { return a.first == b.first ? a.second < b.second : a.first > b.first; };
+    if (selected == scores.size()) std::sort(scores.begin(), scores.end(), better);
+    else std::partial_sort(scores.begin(), scores.begin() + selected, scores.end(), better);
     std::vector<int> top;
     for (int i =0; i<std::min(top_k, (int)scores.size()); ++i) top.push_back(scores[i].second);
     return top;

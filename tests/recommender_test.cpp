@@ -23,6 +23,9 @@ int main() {
     Recommender r;
     r.load_embeddings(csv, paths);
     require(r.recommend({0,1}, 1) == std::vector<int>{1});
+    require(r.recommend({1,0}, 1, {0}) == std::vector<int>{1});
+    require(r.recommend({1,0}, 0).empty());
+    require(r.recommend({1,0}, 3, {0,1}).empty());
     require(r.recommend({0,0}, 2) == std::vector<int>({0,1}));
     rejects([&] { r.recommend({1}, 1); });
     rejects([&] { r.recommend({1,0}, -1); });

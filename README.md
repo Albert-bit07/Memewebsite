@@ -2,7 +2,7 @@
 
 **A C++ recommendation server with an offline Python embedding pipeline and a browser meme-feed demo.** Image vectors are prepared once; recommendation requests do not start Python, load CLIP or cross a language boundary.
 
-The current retrieval baseline is deliberately straightforward: maintain a vector sum for liked images, normalize it, scan the immutable catalog with cosine similarity, and sort the scores. This makes storage, concurrency and retrieval improvements independently testable.
+The current retrieval baseline is deliberately straightforward: maintain a vector sum for liked images, normalize it, scan the immutable catalog with cosine similarity, and select the highest scores. This makes storage, concurrency and retrieval improvements independently testable.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ The output directory must not exist. Files are assembled in a temporary sibling 
 
 Likes and unlikes update a C++ vector sum incrementally. Duplicate likes and unlikes are idempotent at the HTTP boundary; removing the last like resets the sum exactly. A recommendation request copies the normalized preference under a short mutex, then releases it before scoring immutable vectors. Concurrent requests therefore do not hold the user-state lock through the full ranking scan.
 
-The current ranking cost remains O(ND + N log N). No latency, throughput or quality improvement is claimed without measurements. Cold-start preference vectors are zero; session-specific ordering supplies initial variety, and seen items are filtered.
+Warm ranking uses partial sorting for O(ND + N log K) work and O(N) score storage. [The reproducible synthetic benchmark](benchmarks/README.md) compares this path with full sorting and checks exact output equality. These in-process measurements do not establish HTTP throughput or recommendation quality. Cold-start preference vectors are zero; session-specific ordering supplies initial variety, and seen items are filtered.
 
 ## Persistent personalization
 
@@ -66,7 +66,7 @@ The browser obtains an opaque session cookie from `POST /session` (HttpOnly, Sam
 
 ## Current boundaries and next milestones
 
-This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery, session expiration cleanup or rate limiting. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, live catalog replacement and retrieval benchmarks remain outstanding.
+This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery, session expiration cleanup or rate limiting. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, live catalog replacement, concurrent-load measurements and relevance evaluation remain outstanding.
 
 CI builds the full native server, runs catalog/preference regressions, and tests independent HTTP sessions, duplicate feedback, concurrent ranking, seen filtering and preference reconstruction across two server restarts. Catalog tests reject invalid schema versions, dimensions, duplicate IDs and path traversal while preserving the prior loaded version. There is no production deployment or formal verification claim.
 

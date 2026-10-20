@@ -1,0 +1,8 @@
+# compiler=13.3.0; seed=20261020; dimensions=64; k=20; trials=20; excludes_every_10th_item
+items,method,median_ms,p95_ms,total_ms,queries_per_second,process_peak_rss_kib
+1000,full_sort,0.098252,0.138628,2.14528,9322.81,2460
+1000,partial_sort,0.066259,0.129655,1.6275,12288.8,2460
+10000,full_sort,1.15547,1.25602,23.4772,851.889,6940
+10000,partial_sort,0.645639,0.865368,13.9427,1434.44,6940
+100000,full_sort,13.9733,16.6797,290.628,68.8166,49532
+100000,partial_sort,7.21584,9.32101,150.911,132.528,49532
