@@ -1,57 +1,67 @@
-# Meme Feed — C++ / Python recommendation prototype
+# Meme Feed — native recommendation serving
 
-**A local scrolling meme feed that ranks image embeddings in C++ and computes a like-based preference vector through embedded Python.**
+**A C++ recommendation server with an offline Python embedding pipeline and a browser meme-feed demo.** Image vectors are prepared once; recommendation requests do not start Python, load CLIP or cross a language boundary.
 
-The project explores a simple personalization loop: represent images as vectors, average the vectors a user likes, and retrieve similar images. It is a small content-based recommendation prototype, not a trained ranking service.
-
-- C++ HTTP routes serve recommendations, image files, status and feedback.
-- Python loads CLIP ViT-B/32 for image embedding; an offline script writes vectors and paths.
-- A C++ cosine-similarity scan ranks candidates; Python computes the normalized mean of liked vectors.
-- A browser feed displays images, sends likes and requests refreshed recommendations.
-
-**Ownership:** a collaborative repository. Albert authored the [CLIP recommender integration commit](https://github.com/Albert-bit07/Memewebsite/commit/bb6ad40a65eae81cee159e1aaf0b4f2e9fee0568); other contributors appear in history.
-
-**Stack:** C++17 · cpp-httplib · nlohmann/json · pybind11 · Python · NumPy · PyTorch/OpenAI CLIP · HTML/CSS/JavaScript.
-
-[Demo and setup](docs/demo.md) · [Engineering details](docs/project-overview.md)
+The current retrieval baseline is deliberately straightforward: maintain a vector sum for liked images, normalize it, scan the immutable catalog with cosine similarity, and sort the scores. This makes storage, concurrency and retrieval improvements independently testable.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-  I[Image folder] --> E[Python CLIP embedding script]
-  E --> F[(CSV vectors and JSON paths)]
-  F --> S[C++ HTTP server]
-  B[Browser feed] -->|likes and recommendation requests| S
-  S --> P[Embedded Python preference mean]
-  P --> R[C++ cosine ranking]
+  I[Image collection] --> P[Offline Python and CLIP]
+  P --> A[(Versioned catalog artifact)]
+  A --> V[C++ catalog validation]
+  V --> R[Read-only vectors and item IDs]
+  B[Browser] --> H[C++ HTTP routes]
+  H --> U[Mutable preference sum]
+  U --> S[Cosine scan and ranking]
   R --> S
-  S -->|ranked image indexes and bytes| B
+  S --> B
 ```
 
-Source-derived illustration. [embed_memes.py](backend/python/embed_memes.py) creates vectors, [py_recommender.py](backend/python/py_recommender.py) averages likes, [recommender.cpp](backend/cpp/recommender.cpp) sorts cosine scores, and [main.cpp](backend/cpp/main.cpp) serves the browser's requests. [script.js](frontend/script.js) calls loopback port 18080.
+Python generates vectors, images and a manifest into a new artifact directory. C++ validates metadata, dimensions, item IDs, file paths and vector values before replacing a loaded catalog. A failed load leaves the previous catalog intact. The server loads its catalog at startup; live HTTP catalog replacement is not yet exposed.
 
-## How ranking works
+## Build and run
 
-Each stored image has a vector. Likes add unique indexes to one process-global list. Python averages those rows and normalizes the mean; C++ compares it against every candidate and fully sorts scores, returning up to 20. For N images of dimension D, this is O(ND + N log N), excluding Python conversion and preference computation. No index or approximate-nearest-neighbor service is used.
-
-With no likes, the preference vector is zero and all scores tie; ordering is not a meaningful recommendation. Liked items are not filtered out. Unlike removes the index; repeated likes are idempotent. Skip leaves existing preferences unchanged. There are no separate users or durable preferences.
-
-## Boundaries
-
-The server binds loopback and keeps one process-global preference list. There is no authentication, persistent user store, request budget, recommendation evaluation or measured latency improvement. Keep it a single-user local demo. Dataset rights and vendored-header security/provenance still need review. CLIP regeneration and browser behavior have not been end-to-end validated.
-
-## Runtime repairs and current build
-
-The root CMake project now delegates to `backend/cpp`; Python is selected from the environment rather than a Windows-only Python 3.10 path. Serving committed vectors requires NumPy and pybind11; CLIP is needed only to regenerate embeddings. The interpreter has scoped ownership, the listener releases the GIL, and request threads acquire it for Python work. Preferences remain process-global: use this as a single-user local demo. Likes are idempotent, unlike removes a like, invalid actions/indices return 400, and preference reads share the same mutex as writes. Image paths are relative to the `backend` working directory.
+Serving requires a C++17 compiler, CMake and threads. Python is only needed for the test driver or offline generation, not the server executable.
 
 ```bash
-python -m pip install numpy pybind11
-cmake -S . -B /tmp/meme-build
-cmake --build /tmp/meme-build -j2
-ctest --test-dir /tmp/meme-build --output-on-failure
-python tests/server_smoke.py /tmp/meme-build/backend/cpp/recommender
-# Interactive server: run /tmp/meme-build/backend/cpp/recommender from backend/
+cmake -S . -B build-native
+cmake --build build-native -j2
+ctest --test-dir build-native --output-on-failure
+python tests/server_smoke.py build-native/backend/cpp/recommender
+python -m unittest discover -s tests -p 'test_*.py' -v
+cd backend
+../build-native/backend/cpp/recommender
 ```
 
-For ranking-only checks without Python development libraries, configure with `-DBUILD_SERVER=OFF`. Invalid CSV values/dimensions and mismatched manifests fail at load; failed reloads preserve the prior dataset. Ranking rejects malformed vectors and breaks ties by index. Core regression tests pass locally. Hosted CI builds the full server and passes the HTTP smoke test, including concurrent recommendation requests, likes/unlike, invalid feedback and image serving. The local environment lacks the Python embedding library. No throughput/latency improvement is claimed. Existing checked-in Windows build artifacts remain historical and are not used by these commands.
+Open `frontend/index.html` in a browser while the server listens on `127.0.0.1:18080`. You can pass an alternate manifest path as the server's first argument. Paths inside the manifest resolve relative to the manifest directory, not the process working directory.
+
+## Catalog contract
+
+`backend/data/catalog.json` describes the checked-in vectors. It intentionally records their model provenance as `unknown-legacy-provenance`: the repository contains a CLIP generator, but that does not prove exactly how the committed vectors were produced.
+
+A schema-v1 manifest contains `catalog_version`, `model_version`, `dimension`, a relative CSV `vectors` path, and ordered `items` with unique stable IDs and relative image paths. Item order corresponds to vector rows. The generator derives IDs from the relative image filename; preserving filenames preserves identity across generations, while renaming changes identity. IDs are not vector indexes.
+
+For a new image collection, install the offline pipeline's PyTorch, OpenAI CLIP, Pillow and NumPy dependencies in a separate environment, then run:
+
+```bash
+python backend/python/embed_memes.py /tmp/meme-catalog-v2 --version v2 --images /path/to/permitted/images
+build-native/backend/cpp/recommender /tmp/meme-catalog-v2/catalog.json
+```
+
+The output directory must not exist. Files are assembled in a temporary sibling directory and renamed only after successful generation. An error removes that temporary artifact. CLIP regeneration has not been executed in the current validation; the artifact writer is tested with synthetic vectors.
+
+## Preference and concurrency behavior
+
+Likes and unlikes update a C++ vector sum incrementally. Duplicate likes and unlikes are idempotent at the HTTP boundary; removing the last like resets the sum exactly. A recommendation request copies the normalized preference under a short mutex, then releases it before scoring immutable vectors. Concurrent requests therefore do not hold the user-state lock through the full ranking scan.
+
+The current ranking cost remains O(ND + N log N). No latency, throughput or quality improvement is claimed without measurements. Cold-start vectors are zero, ties use catalog order, and seen/liked items are not filtered yet.
+
+## Current boundaries and next milestones
+
+Preferences are still shared by the local process and disappear on restart. The next milestone is SQLite-backed independent sessions, feedback events, seen filtering and restart reconstruction. This is a loopback, single-user demo until that is complete. Dataset permissions, model provenance, browser behavior, rate limits and vendored-header review remain outstanding.
+
+CI builds the full native server, runs catalog/preference regressions, exercises actual HTTP like/unlike and concurrent recommendations, and verifies image serving. Catalog tests reject invalid schema versions, dimensions, duplicate IDs and path traversal while preserving the prior loaded version. There is no production deployment or formal verification claim.
+
+**Ownership:** collaborative repository; Albert authored the original [CLIP integration](https://github.com/Albert-bit07/Memewebsite/commit/bb6ad40a65eae81cee159e1aaf0b4f2e9fee0568). Subsequent engineering work is visible in commit and PR history.
