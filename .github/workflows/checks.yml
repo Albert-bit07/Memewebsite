@@ -10,6 +10,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - run: cmake -S . -B /tmp/meme-build
       - run: cmake --build /tmp/meme-build -j2
       - run: ctest --test-dir /tmp/meme-build --output-on-failure
