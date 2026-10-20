@@ -9,11 +9,11 @@ The project explores a simple personalization loop: represent images as vectors,
 - A C++ cosine-similarity scan ranks candidates; Python computes the normalized mean of liked vectors.
 - A browser feed displays images, sends likes and requests refreshed recommendations.
 
-**Ownership:** a collaborative repository. Albert authored the [CLIP recommender integration commit](https://github.com/Albert-bit07/Memewebsite/commit/bb6ad40a65eae81cee159e1aaf0b4f2e9fee0568); other contributors appear in history. Do not attribute the whole frontend or repository solely to Albert.
+**Ownership:** a collaborative repository. Albert authored the [CLIP recommender integration commit](https://github.com/Albert-bit07/Memewebsite/commit/bb6ad40a65eae81cee159e1aaf0b4f2e9fee0568); other contributors appear in history.
 
 **Stack:** C++17 · cpp-httplib · nlohmann/json · pybind11 · Python · NumPy · PyTorch/OpenAI CLIP · HTML/CSS/JavaScript.
 
-[Demo and setup](docs/demo.md) · [Engineering details](docs/project-overview.md) · [Recruiting notes](docs/recruiting.md)
+[Demo and setup](docs/demo.md) · [Engineering details](docs/project-overview.md)
 
 ## Architecture
 
