@@ -48,3 +48,18 @@ On 2026-10-20, Python AST parsing passed for both scripts and `node --check fron
 The HTTP library uses worker threads, while embedded Python calls lack an explicit GIL acquisition/release policy. The C++ mutex does not substitute for the Python GIL. Concurrent status/feedback access also needs review. These are unresolved runtime risks, not validated thread safety.
 
 Feedback indexes are not range-validated before preference lookup. There is no authentication, persistent user store, request budget, recommendation evaluation or measured latency improvement. The server binds loopback; keep it local. Model initialization is required at startup even with precomputed vectors, and model weights may need downloading. Dataset rights and the pinned versions/provenance of vendored headers are not established. No public deployment or recording was produced by this review.
+
+## Runtime repairs and current build
+
+The root CMake project now delegates to `backend/cpp`; Python is selected from the environment rather than a Windows-only Python 3.10 path. Serving committed vectors requires NumPy and pybind11; CLIP is needed only to regenerate embeddings. The interpreter has scoped ownership, the listener releases the GIL, and request threads acquire it for Python work. Preferences remain process-global: use this as a single-user local demo. Likes are idempotent, unlike removes a like, invalid actions/indices return 400, and preference reads share the same mutex as writes. Image paths are relative to the `backend` working directory.
+
+```bash
+python -m pip install numpy pybind11
+cmake -S . -B /tmp/meme-build
+cmake --build /tmp/meme-build -j2
+ctest --test-dir /tmp/meme-build --output-on-failure
+python tests/server_smoke.py /tmp/meme-build/backend/cpp/recommender
+# Interactive server: run /tmp/meme-build/backend/cpp/recommender from backend/
+```
+
+For ranking-only checks without Python development libraries, configure with `-DBUILD_SERVER=OFF`. Invalid CSV values/dimensions and mismatched manifests fail at load; failed reloads preserve the prior dataset. Ranking rejects malformed vectors and breaks ties by index. The local environment can compile/run core tests but lacks the Python embedding library; full HTTP validation is delegated to the added CI workflow. No throughput/latency improvement is claimed. Existing checked-in Windows build artifacts remain historical and are not used by these commands.

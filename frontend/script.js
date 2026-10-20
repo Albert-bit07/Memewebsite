@@ -144,7 +144,7 @@ async function toggleLike(memeIndex, queueIndex, button, event) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                action: isLiked ? 'skip' : 'like', 
+                action: isLiked ? 'unlike' : 'like',
                 index: memeIndex 
             })
         });

@@ -5,6 +5,7 @@
 #include <string>
 #include <mutex>
 #include <fstream>
+#include <algorithm>
 
 #include "httplib.h"
 #include "json.hpp"
@@ -31,11 +32,11 @@ int main(int argc, char** argv){
     // 2) Initialize Python interpreter with error handling
     std::cout << "Initializing Python interpreter..." << std::endl;
     
-    py::scoped_interpreter *guard = nullptr;
+    py::scoped_interpreter guard{};
     py::module_ pyrec;
     
     try {
-        guard = new py::scoped_interpreter();
+
         std::cout << "Python interpreter started" << std::endl;
         
         // Add current directory to Python path
@@ -51,7 +52,7 @@ int main(int argc, char** argv){
         
         // Call init_model
         std::cout << "Initializing CLIP model (this may take a minute)..." << std::endl;
-        pyrec.attr("init_model")();
+        // Serving precomputed vectors requires NumPy, not a CLIP model download.
         std::cout << "Python CLIP model initialized." << std::endl;
         
     } catch(const py::error_already_set &e) {
@@ -76,6 +77,7 @@ int main(int argc, char** argv){
     // GET /recommend - Get recommendations based on liked memes
     svr.Get("/recommend", [&](const httplib::Request& req, httplib::Response& res) {
         std::lock_guard<std::mutex> lock(mu);
+        py::gil_scoped_acquire gil;
         
         try {
             // Compute user vector by calling Python compute_user_pref
@@ -116,11 +118,19 @@ int main(int argc, char** argv){
             std::string action = body["action"];
             int idx = body["index"];
             
+            std::lock_guard<std::mutex> lock(mu);
+            if (idx < 0 || idx >= static_cast<int>(recommender.get_embeddings().size()) ||
+                (action != "like" && action != "unlike" && action != "skip")) {
+                throw std::invalid_argument("Invalid feedback index or action");
+            }
             {
-                std::lock_guard<std::mutex> lock(mu);
                 if(action == "like"){
-                    liked_indices.push_back(idx);
+                    if (std::find(liked_indices.begin(), liked_indices.end(), idx) == liked_indices.end()) {
+                        liked_indices.push_back(idx);
+                    }
                     std::cout << "User liked index: " << idx << std::endl;
+                } else if(action == "unlike") {
+                    liked_indices.erase(std::remove(liked_indices.begin(), liked_indices.end(), idx), liked_indices.end());
                 } else if(action == "skip"){
                     std::cout << "User skipped index: " << idx << std::endl;
                 }
@@ -142,6 +152,7 @@ int main(int argc, char** argv){
 
     // GET /status - Check server status
     svr.Get("/status", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(mu);
         json response;
         response["status"] = "ok";
         response["embeddings_loaded"] = recommender.get_embeddings().size();
@@ -225,8 +236,10 @@ int main(int argc, char** argv){
     std::cout << "Server running on http://127.0.0.1:18080" << std::endl;
     std::cout << "Try: curl http://127.0.0.1:18080/status" << std::endl;
     
-    svr.listen("127.0.0.1", 18080);
-    
-    if (guard) delete guard;
+    {
+        // Worker threads acquire the GIL around Python calls; main must release it while listening.
+        py::gil_scoped_release release;
+        if (!svr.listen("127.0.0.1", 18080)) return 1;
+    }
     return 0;
 }

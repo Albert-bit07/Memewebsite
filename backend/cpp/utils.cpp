@@ -2,6 +2,8 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <cmath>
+#include <stdexcept>
 #include "json.hpp"
 
 using json = nlohmann::json;
@@ -10,8 +12,7 @@ std::vector<std::vector<float>> loadCSV(const std::string &path){
     std::ifstream file(path);
     std::vector<std::vector<float>> data;
     if (!file.is_open()){
-        std::cerr << "Failed to open CSV: "<< path << std::endl;
-        return data;
+        throw std::runtime_error("Cannot open embeddings CSV: " + path);
     }
     std::string line;
     while(std::getline(file, line)){
@@ -20,11 +21,15 @@ std::vector<std::vector<float>> loadCSV(const std::string &path){
         std::string item;
         std::vector<float> row;
         while(std::getline(ss,item,',')){
-            try{
-                row.push_back(std::stod(item));
-            }catch(...){
-                row.push_back(0.0f);
+            size_t consumed = 0;
+            float value = std::stof(item, &consumed);
+            if (consumed != item.size() || !std::isfinite(value)) {
+                throw std::runtime_error("Invalid embedding value");
             }
+            row.push_back(value);
+        }
+        if (row.empty() || line.back() == ',' || (!data.empty() && row.size() != data.front().size())) {
+            throw std::runtime_error("Inconsistent embedding dimensions");
         }
         data.push_back(row);
     }
@@ -35,8 +40,7 @@ std::vector<std::string> loadPathsJSON(const std::string &path){
     std::ifstream f(path);
     std::vector<std::string> res;
     if (!f.is_open()){
-        std::cerr << "Failed to open JSON: "<< path << std::endl;
-        return res;
+        throw std::runtime_error("Cannot open image manifest: " + path);
     }
     json j;
     f >> j;
