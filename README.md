@@ -23,7 +23,7 @@ Python generates vectors, images and a manifest into a new artifact directory. C
 
 ## Build and run
 
-Serving requires a C++17 compiler, CMake and threads. Python is only needed for the test driver or offline generation, not the server executable.
+Serving requires a C++17 compiler, CMake, SQLite development headers/library and threads. On Ubuntu, install `libsqlite3-dev`. Python is only needed for the test driver or offline generation, not the server executable.
 
 ```bash
 cmake -S . -B build-native
@@ -35,7 +35,7 @@ cd backend
 ../build-native/backend/cpp/recommender
 ```
 
-Open `frontend/index.html` in a browser while the server listens on `127.0.0.1:18080`. You can pass an alternate manifest path as the server's first argument. Paths inside the manifest resolve relative to the manifest directory, not the process working directory.
+Open `http://127.0.0.1:18080` in a browser; the C++ server serves the frontend from `../frontend` when launched from `backend/`. Separate browser profiles receive independent anonymous sessions. You can pass an alternate manifest path as the server's first argument, a SQLite database path as the second, and a frontend directory as the third. Paths inside the manifest resolve relative to the manifest directory, not the process working directory.
 
 ## Catalog contract
 
@@ -56,12 +56,18 @@ The output directory must not exist. Files are assembled in a temporary sibling 
 
 Likes and unlikes update a C++ vector sum incrementally. Duplicate likes and unlikes are idempotent at the HTTP boundary; removing the last like resets the sum exactly. A recommendation request copies the normalized preference under a short mutex, then releases it before scoring immutable vectors. Concurrent requests therefore do not hold the user-state lock through the full ranking scan.
 
-The current ranking cost remains O(ND + N log N). No latency, throughput or quality improvement is claimed without measurements. Cold-start vectors are zero, ties use catalog order, and seen/liked items are not filtered yet.
+The current ranking cost remains O(ND + N log N). No latency, throughput or quality improvement is claimed without measurements. Cold-start preference vectors are zero; session-specific ordering supplies initial variety, and seen items are filtered.
+
+## Persistent personalization
+
+The browser obtains an opaque session cookie from `POST /session` (HttpOnly, SameSite=Strict). SQLite stores sessions, per-item liked/seen state and a transition event history. State changes and their events commit together before in-memory preferences change. Duplicate feedback does not add duplicate transitions. On restart, liked stable item IDs reconstruct each session's vector sum against the current catalog.
+
+`GET /recommend` excludes items marked seen. The browser reports actual visibility through one shared intersection observer. New sessions use a deterministic session-specific cold-start order; this is exploration, not a claim of learned relevance. Removing the last like resets the preference exactly. Ranking happens after releasing the storage/state mutex. The derived-state cache is bounded at 1024 sessions; eviction leaves durable interactions intact.
 
 ## Current boundaries and next milestones
 
-Preferences are still shared by the local process and disappear on restart. The next milestone is SQLite-backed independent sessions, feedback events, seen filtering and restart reconstruction. This is a loopback, single-user demo until that is complete. Dataset permissions, model provenance, browser behavior, rate limits and vendored-header review remain outstanding.
+This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery, session expiration cleanup or rate limiting. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, live catalog replacement and retrieval benchmarks remain outstanding.
 
-CI builds the full native server, runs catalog/preference regressions, exercises actual HTTP like/unlike and concurrent recommendations, and verifies image serving. Catalog tests reject invalid schema versions, dimensions, duplicate IDs and path traversal while preserving the prior loaded version. There is no production deployment or formal verification claim.
+CI builds the full native server, runs catalog/preference regressions, and tests independent HTTP sessions, duplicate feedback, concurrent ranking, seen filtering and preference reconstruction across two server restarts. Catalog tests reject invalid schema versions, dimensions, duplicate IDs and path traversal while preserving the prior loaded version. There is no production deployment or formal verification claim.
 
 **Ownership:** collaborative repository; Albert authored the original [CLIP integration](https://github.com/Albert-bit07/Memewebsite/commit/bb6ad40a65eae81cee159e1aaf0b4f2e9fee0568). Subsequent engineering work is visible in commit and PR history.
