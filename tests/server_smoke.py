@@ -28,6 +28,7 @@ try:
             time.sleep(0.1)
     else:
         raise RuntimeError('Server did not become ready')
+    assert status['catalog_version'] == 'legacy-20261020'
     assert status['embeddings_loaded'] == status['paths_loaded'] > 0
     assert request('/feedback', {'index': 0, 'action': 'like'})['liked_count'] == 1
     assert request('/feedback', {'index': 0, 'action': 'like'})['liked_count'] == 1
@@ -43,7 +44,7 @@ try:
     assert all(len(result['recommendations']) == 20 for result in results)
     with urllib.request.urlopen('http://127.0.0.1:18080/image/0', timeout=5) as response:
         assert response.status == 200 and len(response.read()) > 0
-    print('HTTP feedback, concurrent Python ranking and image smoke checks passed')
+    print('HTTP feedback, concurrent native ranking and image smoke checks passed')
 finally:
     process.terminate()
     try:

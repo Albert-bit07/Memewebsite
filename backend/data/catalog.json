@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "catalog_version": "legacy-20261020",
+  "model_version": "unknown-legacy-provenance",
+  "dimension": 512,
+  "vectors": "embeddings.csv",
+  "items": [
+    {
+      "id": "6c91fc8867e845315045ba3ad03322d743d7f61bcfcecf5b3d5caac9a85a3bab",
+      "path": "memes/2nd period pmo.jpeg"
+    },
+    {
+      "id": "be96f4b6243c435bd560dbe9c672c61b7ee472245922eb6a19a1a16468ca4d62",
+      "path": "memes/Just why_.jpeg"
+    },
+    {
+      "id": "28ab7581ce6417b125a587a996feda261c4eefe91fb2026155a8e51c0d6c529b",
+      "path": "memes/Like girl sybau.jpeg"
+    },
+    {
+      "id": "0000f7f26437c7a474e3839b955df76fac82a209c898ee68f7075eac5c892af2",
+      "path": "memes/Relatable stuff.jpeg"
+    },
+    {
+      "id": "38c45da161129811c81f27407c8a144051fcafab9513ecae9956369cdfbba2ef",
+      "path": "memes/This is so real.jpeg"
+    },
+    {
+      "id": "63c23dbb98197d5122d03e2641481376b45ce8a868a1b28527624fa9a86be54d",
+      "path": "memes/Today's 19 Most Hilarious Memes.jpeg"
+    },
+    {
+      "id": "3d7ff1112d1ba92573d2b05e8e7def0b8c5593333265ce7402b259a3bfc6f84e",
+      "path": "memes/With No Trick-Or-Treating This Year, Mom Gives Daughters 31 Days Of Halloween Makeup.jpeg"
+    },
+    {
+      "id": "69fa187a445f312600d705aad57305c273f422d9a81cf19ebcec2b7442e32949",
+      "path": "memes/Wow that's not true.jpeg"
+    },
+    {
+      "id": "2fcdb576fc5e256c3e9128e85002974056649a9afb379a377cfd4bc6a2cbdd78",
+      "path": "memes/Yessss.jpeg"
+    },
+    {
+      "id": "8a31944a1ff16a909f4ae2536762140eafdb62c4931623b2a6bb624d0014dacb",
+      "path": "memes/being rude AND ugly is just diabolical.jpeg"
+    },
+    {
+      "id": "60eea3dea431b025a14927efc08633ab3cef157cb55ac3e7bf4d0d1c9bc1ecdb",
+      "path": "memes/download (1).jpeg"
+    },
+    {
+      "id": "b0294f739303ee613801bfcef9d50a6d3368634fb0b4f266e9de4647bd709604",
+      "path": "memes/download (11).jpeg"
+    },
+    {
+      "id": "4993a8081ff16ac6218d081d96f4d7219462d6a067f53f1def5ec886348cbe0b",
+      "path": "memes/download (12).jpeg"
+    },
+    {
+      "id": "6035546db44653ba81a08e4cf7d732a3788786f0cf20949b6b0fdb6e041ea5d5",
+      "path": "memes/download (13).jpeg"
+    },
+    {
+      "id": "0129efeac23f2fb98414eb9946b0297ebc483a532a6b32e79af00e777799cf70",
+      "path": "memes/download (14).jpeg"
+    },
+    {
+      "id": "c2bf72d47cf366c0ee23643b552c7e932281ba2fb7f08ac5ece3da32d5f1830d",
+      "path": "memes/download (15).jpeg"
+    },
+    {
+      "id": "666f7877b7cf24d5b360941ec8f4ba285b4a5278be3e9dd897f4c548d7ac5d76",
+      "path": "memes/download (16).jpeg"
+    },
+    {
+      "id": "f0a5c7a422a9660dc56516f1a6e07be8103711a5670f8991b9e0f44602d6b2ed",
+      "path": "memes/download (17).jpeg"
+    },
+    {
+      "id": "1019255fb125f1ef96f8af81b4f187aa919647121f7f0e37dfe6610ad58e8106",
+      "path": "memes/download (2).jpeg"
+    },
+    {
+      "id": "098b187d8354101911c5e16a1b4367d53b7f1ea818f210943aa4be00c827e023",
+      "path": "memes/download (3).jpeg"
+    },
+    {
+      "id": "b0c5dc4e47bcbd834e1689665e142447d3120a717b6a82a45ab546da622f0c13",
+      "path": "memes/download (4).jpeg"
+    },
+    {
+      "id": "42897dc54cbe68ae090709756dbf6b5af352c7ff1e70ba82179a95b03dbc6153",
+      "path": "memes/download (5).jpeg"
+    },
+    {
+      "id": "9a67449f0c36c9ac14d5948983f3b9d729930ead4a47f2d87f3de918792f65bf",
+      "path": "memes/download (6).jpeg"
+    },
+    {
+      "id": "7d6ad765f264172c2d865919cd1bf68145aab40224163745a2594ac5e437407d",
+      "path": "memes/download (7).jpeg"
+    },
+    {
+      "id": "96889b51928a672bd532434c5659a5a281c9938d3ab8ca2f7bc022d81132c656",
+      "path": "memes/download (8).jpeg"
+    },
+    {
+      "id": "2ec6242b6401061358605b24ec1721c74c6d6b48b18dd828af318d0f4d1a04c8",
+      "path": "memes/download.jpeg"
+    },
+    {
+      "id": "6605c32c95a1883a3e240df841bc94d0a2062444ff27b77aa39fed7ec73b7628",
+      "path": "memes/download.jpg"
+    },
+    {
+      "id": "52a672f391350b92a7850b655c617731c6e2099859d4d50e3bba0f00aa3d8ef6",
+      "path": "memes/images (1).jpeg"
+    },
+    {
+      "id": "6badd0c0cc0a5e2146bfe912d26f1d7bb1b3e06417d3693ef42f24473579d1fe",
+      "path": "memes/images (10).jpeg"
+    },
+    {
+      "id": "ca691d8887e70d272088508af51ac7f99ea6c275e6d8849c4118be575813cdee",
+      "path": "memes/images (11).jpeg"
+    },
+    {
+      "id": "60a30ca3c3b1bd9b3a317d6959e47c49b89bf667ab5ccec1b9fe8b02ece77210",
+      "path": "memes/images (12).jpeg"
+    },
+    {
+      "id": "a5beb7d515765a980756a32e823bd938268a89907ceda66672e5da6cdcdea50c",
+      "path": "memes/images (13).jpeg"
+    },
+    {
+      "id": "f2a03f280f810f9b08f52c176cb4af9e688fe4623d89e208435cd0aefdd5362d",
+      "path": "memes/images (14).jpeg"
+    },
+    {
+      "id": "e0f49d15edb9835973bc0219aacb2a3b429a6d1d8f0558278503eb0baa469290",
+      "path": "memes/images (15).jpeg"
+    },
+    {
+      "id": "05189b66c476dbe19a721be630de36d99c433c82faee426ba6f7e2c21d028bef",
+      "path": "memes/images (16).jpeg"
+    },
+    {
+      "id": "b2aeafa54fd44d22f54bbde6baa69e431b6cb0854638c7a60d5005be5f0b1be9",
+      "path": "memes/images (17).jpeg"
+    },
+    {
+      "id": "b444a84f770075ae5658de2675fa65d349ad8f1a8e2d7e3b86cbeb3a5e2efab5",
+      "path": "memes/images (18).jpeg"
+    },
+    {
+      "id": "e9de67bbcc4b33056b24d5e15c55d310cd398f72e32116cbfb12acd1fae3b266",
+      "path": "memes/images (2).jpeg"
+    },
+    {
+      "id": "6fb55fb9f4c87da51aa28f557230e33557caa673ec11fb0f82704dc29c6de2ea",
+      "path": "memes/images (3).jpeg"
+    },
+    {
+      "id": "2e0c9fd7673c09c633f48306658a930e26c4164e2220f6be0395dac3f6bc44bd",
+      "path": "memes/images (4).jpeg"
+    },
+    {
+      "id": "faa976ec0169f4df5c5af796a93a365b3115693c1ea963bb3e1fa65e8a784b1c",
+      "path": "memes/images (5).jpeg"
+    },
+    {
+      "id": "4ef0a0aa1ee372651e0243e0fe9001e396fa7bc418329b223060f931366e19b2",
+      "path": "memes/images (6).jpeg"
+    },
+    {
+      "id": "88c21b03e34c4a1e156b66c841af7aead9251ace2d34ad91d6154269d1015d8a",
+      "path": "memes/images (7).jpeg"
+    },
+    {
+      "id": "6b6b0d224fe1ac15bfcf04a1e9e1628abecde3f70e7f16e450237e4983f0801a",
+      "path": "memes/images (8).jpeg"
+    },
+    {
+      "id": "5ecb3f37a6e714530ae8b5c89d0d6cc2851d9f1a8a7f5714ef2f7387efff7abc",
+      "path": "memes/images (9).jpeg"
+    },
+    {
+      "id": "b431409b2185eabc45a21fbbdb18310be0776d3aed45ea7b9dc633d5eb93ee68",
+      "path": "memes/images.jpeg"
+    },
+    {
+      "id": "778e74c421bd1bc06993d1e63ca80e057aa5ebc2ad9bfd2b9c1ebe44f19f91ff",
+      "path": "memes/images.jpg"
+    },
+    {
+      "id": "0010883737322f1460d5efbdabdb42136fe66add0067daabe2f83aaf36676b8b",
+      "path": "memes/images.png"
+    },
+    {
+      "id": "9b484a4cda9c172e094bdc7cf58b3648079480640f014ccd4a824837953880f6",
+      "path": "memes/kiinggg JJUUUULIIIAAANNNN !!!.jpeg"
+    },
+    {
+      "id": "faa419ed0282d75ffd32f63961851d2bf6c319456ebe39ce7576443107c7399c",
+      "path": "memes/like i swear they don\u2019t even have a licence.jpeg"
+    },
+    {
+      "id": "6cf1421ebee46836b7e7e046f967a259698bb36d9725e315f65e420a0819d46e",
+      "path": "memes/oops!.jpeg"
+    },
+    {
+      "id": "4a07c77423d0e9632efd4e7c778b10e05ccd451ee8de24526bd9cc4dd18cad8d",
+      "path": "memes/sad.jpeg"
+    },
+    {
+      "id": "b735933e45a62c349ccc018fa63e899a407fe695a42476b48bd942d6eb288ca1",
+      "path": "memes/scary.jpeg"
+    },
+    {
+      "id": "95deef1518e5ebf3450ad4167ec3167d2a3daee6e1c47ee731d74f1f8201b283",
+      "path": "memes/trust me i WILL come with screenshots.jpeg"
+    }
+  ]
+}

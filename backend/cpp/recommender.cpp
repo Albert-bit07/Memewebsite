@@ -1,3 +1,7 @@
+#include "json.hpp"
+#include <filesystem>
+#include <fstream>
+#include <unordered_set>
 #include "recommender.hpp"
 #include "utils.hpp"
 #include <algorithm>
@@ -21,7 +25,7 @@ void Recommender::load_embeddings(const std::string &csv_path, const std::string
     }
 }
 
-float Recommender::cosine_similarity(const std::vector<float>& a, const std::vector<float>& b){
+float Recommender::cosine_similarity(const std::vector<float>& a, const std::vector<float>& b) const {
     double dot= 0.0, na=0.0, nb=0.0;
     int n = std::min(a.size(), b.size());
     for (int i=0; i<n; ++i){
@@ -33,7 +37,7 @@ float Recommender::cosine_similarity(const std::vector<float>& a, const std::vec
     return dot/ (std::sqrt(na) * std::sqrt(nb));
 }
 
-std::vector<int> Recommender::recommend(const std::vector<float> &user_vec, int top_k){
+std::vector<int> Recommender::recommend(const std::vector<float> &user_vec, int top_k) const {
     if (top_k < 0 || embeddings.empty() || user_vec.size() != embeddings.front().size() ||
         !std::all_of(user_vec.begin(), user_vec.end(), [](float x) { return std::isfinite(x); })) {
         throw std::invalid_argument("Invalid recommendation request");
@@ -50,3 +54,37 @@ std::vector<int> Recommender::recommend(const std::vector<float> &user_vec, int 
 }
 const std::vector<std::string>& Recommender::get_paths() const{return paths;}
 const std::vector<std::vector<float>>&  Recommender::get_embeddings() const{return embeddings; }
+
+void Recommender::load_catalog(const std::string& manifest) {
+    namespace fs = std::filesystem;
+    std::ifstream file(manifest);
+    if (!file) throw std::runtime_error("Cannot open catalog manifest");
+    const auto doc = nlohmann::json::parse(file);
+    if (doc.at("schema_version").get<int>() != 1 || doc.at("catalog_version").get<std::string>().empty() || doc.at("model_version").get<std::string>().empty()) {
+        throw std::runtime_error("Unsupported or incomplete catalog metadata");
+    }
+    const auto root = fs::absolute(fs::path(manifest).parent_path());
+    auto artifact_path = [&](const std::string& value) {
+        fs::path relative(value);
+        if (relative.empty() || relative.is_absolute()) throw std::runtime_error("Catalog paths must be relative");
+        for (const auto& part : relative) if (part == "..") throw std::runtime_error("Catalog paths cannot escape artifact root");
+        return (root / relative).string();
+    };
+    Recommender next;
+    next.embeddings = loadCSV(artifact_path(doc.at("vectors")));
+    const auto dimension = doc.at("dimension").get<std::size_t>();
+    if (!dimension || next.embeddings.empty() || next.embeddings.front().size() != dimension) throw std::runtime_error("Catalog dimension mismatch");
+    std::unordered_set<std::string> seen;
+    for (const auto& item : doc.at("items")) {
+        auto id = item.at("id").get<std::string>();
+        if (id.empty() || !seen.insert(id).second) throw std::runtime_error("Catalog IDs must be unique and nonempty");
+        auto path = artifact_path(item.at("path"));
+        if (!fs::is_regular_file(path)) throw std::runtime_error("Catalog image missing");
+        next.ids.push_back(std::move(id));
+        next.paths.push_back(std::move(path));
+    }
+    if (next.paths.size() != next.embeddings.size()) throw std::runtime_error("Catalog item/vector count mismatch");
+    next.catalog_version = doc.at("catalog_version");
+    // Publish only after every row and referenced file has been validated.
+    *this = std::move(next);
+}

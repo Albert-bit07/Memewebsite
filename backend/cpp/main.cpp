@@ -1,5 +1,3 @@
-#include <pybind11/embed.h>
-#include <pybind11/stl.h>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -11,10 +9,9 @@
 #include "json.hpp"
 
 #include "recommender.hpp"
+#include "preference.hpp"
 #include "utils.hpp"
 
-using namespace pybind11::literals;
-namespace py = pybind11;
 using json = nlohmann::json;
 
 Recommender recommender;
@@ -22,47 +19,9 @@ std::vector<int> liked_indices;
 std::mutex mu;
 
 int main(int argc, char** argv){
-    std::cout << "Starting C++ Recommender (py embed)" << std::endl;
-    
-    // 1) Load embeddings from CSV + paths JSON
-    std::string csv_path = "data/embeddings.csv";
-    std::string paths_json = "data/meme_paths.json";
-    recommender.load_embeddings(csv_path, paths_json);
+    recommender.load_catalog(argc > 1 ? argv[1] : "data/catalog.json");
+    Preference preference(recommender.get_embeddings().front().size());
 
-    // 2) Initialize Python interpreter with error handling
-    std::cout << "Initializing Python interpreter..." << std::endl;
-    
-    py::scoped_interpreter guard{};
-    py::module_ pyrec;
-    
-    try {
-
-        std::cout << "Python interpreter started" << std::endl;
-        
-        // Add current directory to Python path
-        py::module_ sys = py::module_::import("sys");
-        py::list path = sys.attr("path");
-        path.append(".");
-        path.append("python");
-        path.append("../python");
-        
-        std::cout << "Importing py_recommender module..." << std::endl;
-        pyrec = py::module_::import("py_recommender");
-        std::cout << "Module imported successfully" << std::endl;
-        
-        // Call init_model
-        std::cout << "Initializing CLIP model (this may take a minute)..." << std::endl;
-        // Serving precomputed vectors requires NumPy, not a CLIP model download.
-        std::cout << "Python CLIP model initialized." << std::endl;
-        
-    } catch(const py::error_already_set &e) {
-        std::cerr << "Python error: " << e.what() << std::endl;
-        return 1;
-    } catch(const std::exception &e) {
-        std::cerr << "Error initializing Python: " << e.what() << std::endl;
-        return 1;
-    }
-    
     // 3) Start HTTP server using cpp-httplib
     httplib::Server svr;
 
@@ -76,27 +35,22 @@ int main(int argc, char** argv){
 
     // GET /recommend - Get recommendations based on liked memes
     svr.Get("/recommend", [&](const httplib::Request& req, httplib::Response& res) {
-        std::lock_guard<std::mutex> lock(mu);
-        py::gil_scoped_acquire gil;
-        
         try {
-            // Compute user vector by calling Python compute_user_pref
-            py::list py_likes;
-            for (int i : liked_indices) py_likes.append(i);
-            
-            py::object py_embeddings = py::cast(recommender.get_embeddings());
-            py::object user_vec_obj = pyrec.attr("compute_user_pref")(py_likes, py_embeddings);
-            std::vector<float> user_vec = user_vec_obj.cast<std::vector<float>>();
-
-            // Get more recommendations (20 instead of 10)
+            std::vector<float> user_vec;
+            {
+                std::lock_guard<std::mutex> lock(mu);
+                user_vec = preference.vector();
+            }
+            // The immutable catalog is shared; scoring does not hold the user-state lock.
             auto top = recommender.recommend(user_vec, 20);
-            
+
             // Build JSON response with both path and index
             json response;
             response["recommendations"] = json::array();
             for (int idx : top) {
                 json meme;
                 meme["index"] = idx;
+                meme["id"] = recommender.get_ids()[idx];
                 meme["path"] = recommender.get_paths()[idx];
                 response["recommendations"].push_back(meme);
             }
@@ -127,9 +81,11 @@ int main(int argc, char** argv){
                 if(action == "like"){
                     if (std::find(liked_indices.begin(), liked_indices.end(), idx) == liked_indices.end()) {
                         liked_indices.push_back(idx);
+                        preference.add(recommender.get_embeddings()[idx]);
                     }
                     std::cout << "User liked index: " << idx << std::endl;
                 } else if(action == "unlike") {
+                    if (std::find(liked_indices.begin(), liked_indices.end(), idx) != liked_indices.end()) preference.remove(recommender.get_embeddings()[idx]);
                     liked_indices.erase(std::remove(liked_indices.begin(), liked_indices.end(), idx), liked_indices.end());
                 } else if(action == "skip"){
                     std::cout << "User skipped index: " << idx << std::endl;
@@ -155,6 +111,7 @@ int main(int argc, char** argv){
         std::lock_guard<std::mutex> lock(mu);
         json response;
         response["status"] = "ok";
+        response["catalog_version"] = recommender.version();
         response["embeddings_loaded"] = recommender.get_embeddings().size();
         response["paths_loaded"] = recommender.get_paths().size();
         response["liked_count"] = liked_indices.size();
@@ -236,10 +193,6 @@ int main(int argc, char** argv){
     std::cout << "Server running on http://127.0.0.1:18080" << std::endl;
     std::cout << "Try: curl http://127.0.0.1:18080/status" << std::endl;
     
-    {
-        // Worker threads acquire the GIL around Python calls; main must release it while listening.
-        py::gil_scoped_release release;
-        if (!svr.listen("127.0.0.1", 18080)) return 1;
-    }
+    if (!svr.listen("127.0.0.1", 18080)) return 1;
     return 0;
 }
