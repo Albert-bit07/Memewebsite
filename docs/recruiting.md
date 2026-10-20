@@ -1,3 +1,5 @@
+> Historical review: this page describes the pre-repair baseline. For current build commands, fixes and remaining limitations, use the [README](../README.md).
+
 # Recruiting notes — Meme Feed
 
 ## One sentence / suggested repository description

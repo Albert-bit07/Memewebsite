@@ -1,3 +1,5 @@
+> Historical review: this page describes the pre-repair baseline. For current build commands, fixes and remaining limitations, use the [README](../README.md).
+
 # Local setup and 90-second recording plan
 
 **Status:** unexecuted procedure with known blockers, not a working-demo claim. Use a disposable checkout; retain logs and stop if an instruction fails. The current GIL/threading boundary may prevent runtime requests even after build prerequisites are met.

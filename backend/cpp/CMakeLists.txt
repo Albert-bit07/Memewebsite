@@ -1,44 +1,29 @@
 cmake_minimum_required(VERSION 3.15)
-project(cpp_recommender)
+project(cpp_recommender LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
-
-set(Python3_ROOT_DIR "C:/Program Files/Python310")
-find_package(Python3 3.10 EXACT COMPONENTS Interpreter Development REQUIRED)
-
-message(STATUS "Python3 executable: ${Python3_EXECUTABLE}")
-message(STATUS "Python3 version: ${Python3_VERSION}")
-
-execute_process(
-    COMMAND "${Python3_EXECUTABLE}" -c "import pybind11; print(pybind11.get_include())"
-    OUTPUT_VARIABLE PYBIND11_INCLUDE_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE PYBIND11_RESULT
-)
-
-if(NOT PYBIND11_RESULT EQUAL 0)
-    message(FATAL_ERROR "pybind11 not found")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(CTest)
+add_library(ranking recommender.cpp utils.cpp)
+target_include_directories(ranking PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+option(BUILD_SERVER "Build the embedded Python HTTP server" ON)
+if(BUILD_SERVER)
+    find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+        OUTPUT_VARIABLE pybind11_DIR OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE PYBIND11_RESULT)
+    if(NOT PYBIND11_RESULT EQUAL 0)
+        message(FATAL_ERROR "Install pybind11 in the selected Python environment")
+    endif()
+    find_package(pybind11 CONFIG REQUIRED)
+    find_package(Threads REQUIRED)
+    add_executable(recommender main.cpp)
+    target_link_libraries(recommender PRIVATE ranking pybind11::embed Threads::Threads)
+    if(WIN32)
+        target_link_libraries(recommender PRIVATE ws2_32)
+    endif()
 endif()
-
-include_directories(
-    ${Python3_INCLUDE_DIRS}
-    ${PYBIND11_INCLUDE_DIR}
-    ${CMAKE_SOURCE_DIR}
-)
-
-add_executable(recommender 
-    main.cpp 
-    recommender.cpp 
-    utils.cpp
-)
-
-target_link_libraries(recommender 
-    ${Python3_LIBRARIES}
-)
-
-if(WIN32)
-    target_link_libraries(recommender ws2_32)
+if(BUILD_TESTING)
+    add_executable(recommender_test ../../tests/recommender_test.cpp)
+    target_link_libraries(recommender_test PRIVATE ranking)
+    add_test(NAME ranking_validation COMMAND recommender_test)
 endif()
-
-set_target_properties(recommender PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-)
