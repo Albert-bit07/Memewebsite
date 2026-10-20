@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
         server.Get("/recommend",[&](const httplib::Request& req, httplib::Response& res) {
             const auto token=session_token(req);
             const auto state=users.snapshot(token);
-            auto ranked=catalog.recommend(state.preference,static_cast<int>(catalog.get_ids().size()));
+            auto ranked=catalog.recommend(state.preference,state.liked.empty() ? static_cast<int>(catalog.get_ids().size()) : 20,state.seen);
             if (state.liked.empty()) {
                 std::sort(ranked.begin(),ranked.end(),[&](int a,int b) {
                     const auto x=order_key(token+catalog.get_ids()[a]), y=order_key(token+catalog.get_ids()[b]);
