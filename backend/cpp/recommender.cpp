@@ -64,8 +64,12 @@ void Recommender::load_catalog(const std::string& manifest) {
     std::ifstream file(manifest);
     if (!file) throw std::runtime_error("Cannot open catalog manifest");
     const auto doc = nlohmann::json::parse(file);
-    if (doc.at("schema_version").get<int>() != 1 || doc.at("catalog_version").get<std::string>().empty() || doc.at("model_version").get<std::string>().empty()) {
+    if (!doc.at("schema_version").is_number_integer() || doc.at("schema_version") != 1 || doc.at("catalog_version").get<std::string>().empty() || doc.at("model_version").get<std::string>().empty()) {
         throw std::runtime_error("Unsupported or incomplete catalog metadata");
+    }
+    if (!doc.at("dimension").is_number_integer() || doc.at("dimension") < 1 ||
+        !doc.at("items").is_array()) {
+        throw std::runtime_error("Catalog dimension must be a positive integer and items must be an array");
     }
     const auto root = fs::canonical(fs::absolute(manifest).parent_path());
     auto artifact_path = [&](const std::string& value) {
@@ -83,8 +87,7 @@ void Recommender::load_catalog(const std::string& manifest) {
     };
     Recommender next;
     next.embeddings = loadCSV(artifact_path(doc.at("vectors")));
-    const auto dimension = doc.at("dimension").get<std::size_t>();
-    if (!dimension || next.embeddings.empty() || next.embeddings.front().size() != dimension) throw std::runtime_error("Catalog dimension mismatch");
+    if (next.embeddings.empty() || doc.at("dimension") != next.embeddings.front().size()) throw std::runtime_error("Catalog dimension mismatch");
     std::unordered_set<std::string> seen;
     for (const auto& item : doc.at("items")) {
         auto id = item.at("id").get<std::string>();

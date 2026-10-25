@@ -66,6 +66,22 @@ int main() {
         require(r.version() == "test-v1");
         require(r.recommend({0,1},1) == std::vector<int>{1});
     }
+    for (const auto& field : {"schema_version", "dimension"}) {
+        for (const auto& value : std::vector<nlohmann::json>{
+                 field == std::string("dimension") ? 2.5 : 1.5, -1, true, "2", nullptr}) {
+            auto malformed = manifest;
+            malformed[field] = value;
+            std::ofstream(manifest_path) << malformed;
+            rejects([&] { r.load_catalog(manifest_path); });
+            require(r.version() == "test-v1");
+            require(r.recommend({0,1},1) == std::vector<int>{1});
+        }
+    }
+    auto object_items = manifest;
+    object_items["items"] = {{"first",manifest["items"][0]}, {"second",manifest["items"][1]}};
+    std::ofstream(manifest_path) << object_items;
+    rejects([&] { r.load_catalog(manifest_path); });
+    require(r.version() == "test-v1");
     auto invalid = manifest; invalid["items"][1]["id"] = "a";
     std::ofstream(manifest_path) << invalid;
     rejects([&] { r.load_catalog(manifest_path); });
