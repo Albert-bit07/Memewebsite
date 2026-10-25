@@ -67,12 +67,19 @@ void Recommender::load_catalog(const std::string& manifest) {
     if (doc.at("schema_version").get<int>() != 1 || doc.at("catalog_version").get<std::string>().empty() || doc.at("model_version").get<std::string>().empty()) {
         throw std::runtime_error("Unsupported or incomplete catalog metadata");
     }
-    const auto root = fs::absolute(fs::path(manifest).parent_path());
+    const auto root = fs::canonical(fs::absolute(manifest).parent_path());
     auto artifact_path = [&](const std::string& value) {
         fs::path relative(value);
         if (relative.empty() || relative.is_absolute()) throw std::runtime_error("Catalog paths must be relative");
         for (const auto& part : relative) if (part == "..") throw std::runtime_error("Catalog paths cannot escape artifact root");
-        return (root / relative).string();
+        // Resolve links before checking containment; lexical '..' checks alone
+        // allow an artifact to reference files outside its root through a link.
+        const auto resolved = fs::canonical(root / relative);
+        const auto within_root = resolved.lexically_relative(root);
+        if (within_root.empty() || *within_root.begin() == "..") {
+            throw std::runtime_error("Catalog paths cannot escape artifact root");
+        }
+        return resolved.string();
     };
     Recommender next;
     next.embeddings = loadCSV(artifact_path(doc.at("vectors")));

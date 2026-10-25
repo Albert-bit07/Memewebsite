@@ -41,7 +41,7 @@ Open `http://127.0.0.1:18080` in a browser; the C++ server serves the frontend f
 
 `backend/data/catalog.json` describes the checked-in vectors. It intentionally records their model provenance as `unknown-legacy-provenance`: the repository contains a CLIP generator, but that does not prove exactly how the committed vectors were produced.
 
-A schema-v1 manifest contains `catalog_version`, `model_version`, `dimension`, a relative CSV `vectors` path, and ordered `items` with unique stable IDs and relative image paths. Item order corresponds to vector rows. The generator derives IDs from the relative image filename; preserving filenames preserves identity across generations, while renaming changes identity. IDs are not vector indexes.
+A schema-v1 manifest contains `catalog_version`, `model_version`, `dimension`, a relative CSV `vectors` path, and ordered `items` with unique stable IDs and relative image paths. Item order corresponds to vector rows. The generator derives IDs from the relative image filename; preserving filenames preserves identity across generations, while renaming changes identity. IDs are not vector indexes. Artifact paths are resolved before containment validation: symlinks within the artifact are supported, but links outside it are rejected. Keep the artifact directory read-only while serving; validation does not protect against a local process changing files afterward.
 
 For a new image collection, install the offline pipeline's PyTorch, OpenAI CLIP, Pillow and NumPy dependencies in a separate environment, then run:
 
@@ -68,6 +68,6 @@ The browser obtains an opaque session cookie from `POST /session` (HttpOnly, Sam
 
 This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery, session expiration cleanup or rate limiting. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, live catalog replacement, concurrent-load measurements and relevance evaluation remain outstanding.
 
-CI builds the full native server, runs catalog/preference regressions, and tests independent HTTP sessions, duplicate feedback, concurrent ranking, seen filtering and preference reconstruction across two server restarts. Catalog tests reject invalid schema versions, dimensions, duplicate IDs and path traversal while preserving the prior loaded version. There is no production deployment or formal verification claim.
+CI builds the full native server, runs catalog/preference regressions, and tests independent HTTP sessions, duplicate feedback, concurrent ranking, seen filtering and preference reconstruction across two server restarts. Catalog tests reject invalid schema versions, dimensions, duplicate IDs, path traversal and symlink escapes while preserving the prior loaded version. There is no production deployment or formal verification claim.
 
 **Ownership:** collaborative repository; Albert authored the original [CLIP integration](https://github.com/Albert-bit07/Memewebsite/commit/bb6ad40a65eae81cee159e1aaf0b4f2e9fee0568). Subsequent engineering work is visible in commit and PR history.
