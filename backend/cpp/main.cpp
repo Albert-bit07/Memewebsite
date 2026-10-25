@@ -8,6 +8,7 @@
 #include <iostream>
 #include <numeric>
 #include <regex>
+#include <unordered_map>
 
 using json = nlohmann::json;
 
@@ -32,6 +33,15 @@ int main(int argc, char** argv) {
         Recommender loaded;
         loaded.load_catalog(argc > 1 ? argv[1] : "data/catalog.json");
         const Recommender catalog = std::move(loaded);
+        std::unordered_map<std::string, int> item_indices;
+        for (std::size_t i = 0; i < catalog.get_ids().size(); ++i) {
+            item_indices.emplace(catalog.get_ids()[i], static_cast<int>(i));
+        }
+        const auto item_index = [&](const std::string& id) {
+            const auto found = item_indices.find(id);
+            if (found == item_indices.end()) throw std::invalid_argument("Unknown item");
+            return found->second;
+        };
         UserStore users(argc > 2 ? argv[2] : "data/users.sqlite3",catalog);
         httplib::Server server;
         server.set_payload_max_length(4096);
@@ -61,16 +71,17 @@ int main(int argc, char** argv) {
         });
         server.Get("/status",[&](const httplib::Request& req, httplib::Response& res) {
             const auto state=users.snapshot(session_token(req));
-            respond(res,{{"status","ok"},{"catalog_version",catalog.version()},{"embeddings_loaded",catalog.get_embeddings().size()},
+            std::vector<std::string> liked_ids;
+            for (int index : state.liked) liked_ids.push_back(catalog.get_ids()[index]);
+            std::sort(liked_ids.begin(), liked_ids.end());
+            respond(res,{{"status","ok"},{"liked_ids",liked_ids},{"catalog_version",catalog.version()},{"embeddings_loaded",catalog.get_embeddings().size()},
                 {"paths_loaded",catalog.get_paths().size()},{"liked_count",state.liked.size()},{"liked_indices",state.liked}});
         });
         server.Post("/feedback",[&](const httplib::Request& req, httplib::Response& res) {
             try {
                 const auto body=json::parse(req.body);
-                if (!body.at("index").is_number_integer()) throw std::invalid_argument("Index must be an integer");
-                const auto raw=body.at("index").get<std::int64_t>();
-                if (raw<0 || raw>=static_cast<std::int64_t>(catalog.get_ids().size())) throw std::invalid_argument("Unknown item");
-                const auto count=users.feedback(session_token(req),static_cast<int>(raw),body.at("action").get<std::string>());
+                const auto index = item_index(body.at("id").get<std::string>());
+                const auto count=users.feedback(session_token(req),index,body.at("action").get<std::string>());
                 respond(res,{{"status","ok"},{"liked_count",count}});
             } catch (const json::exception&) { res.status=400; respond(res,{{"error","Invalid feedback"}}); }
               catch (const std::invalid_argument&) { res.status=400; respond(res,{{"error","Invalid item or action"}}); }
@@ -93,10 +104,10 @@ int main(int argc, char** argv) {
             }
             respond(res,{{"recommendations",items}});
         });
-        server.Get("/image/(\\d+)",[&](const httplib::Request& req, httplib::Response& res) {
-            std::size_t index;
-            try { index=std::stoull(req.matches[1]); } catch (...) { res.status=404; return; }
-            if (index>=catalog.get_paths().size()) { res.status=404; return; }
+        server.Get("/image",[&](const httplib::Request& req, httplib::Response& res) {
+            int index;
+            try { index = item_index(req.get_param_value("id")); }
+            catch (const std::invalid_argument&) { res.status=404; return; }
             std::ifstream file(catalog.get_paths()[index],std::ios::binary);
             if (!file) { res.status=404; return; }
             const auto extension=std::filesystem::path(catalog.get_paths()[index]).extension().string();
