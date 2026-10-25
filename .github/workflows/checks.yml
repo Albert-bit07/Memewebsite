@@ -11,9 +11,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - run: cmake -S . -B /tmp/meme-build -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON
-      - run: cmake --build /tmp/meme-build -j2
-      - run: ctest --test-dir /tmp/meme-build --output-on-failure
-      - run: python tests/server_smoke.py /tmp/meme-build/backend/cpp/recommender
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON
+      - run: cmake --build build -j2
+      - run: ctest --test-dir build --output-on-failure
+      - run: python tests/server_smoke.py build/backend/cpp/recommender
       - run: python -m unittest discover -s tests -p "test_*.py" -v
-      - run: /tmp/meme-build/backend/cpp/retrieval_benchmark
+      - run: build/backend/cpp/retrieval_benchmark
