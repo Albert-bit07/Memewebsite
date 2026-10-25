@@ -17,7 +17,7 @@ async function init() {
     try {
         await api('/session', {});
         const status = await api('/status');
-        likedMemes = new Set(status.liked_indices);
+        likedMemes = new Set(status.liked_ids);
         document.getElementById('totalCount').textContent = status.paths_loaded;
         document.getElementById('likedCount').textContent = status.liked_count;
         await loadMoreMemes();
@@ -31,7 +31,7 @@ async function loadMoreMemes() {
         const data = await api('/recommend');
         exhausted = data.recommendations.length === 0;
         for (const meme of data.recommendations) {
-            if (!memeQueue.some(existing => existing.index === meme.index)) {
+            if (!memeQueue.some(existing => existing.id === meme.id)) {
                 memeQueue.push(meme);
                 appendCard(meme);
             }
@@ -47,21 +47,21 @@ function appendCard(meme) {
     const card = document.createElement('div');
     card.className = 'meme-card';
     const image = document.createElement('img');
-    image.src = `/image/${meme.index}`;
+    image.src = `/image?id=${encodeURIComponent(meme.id)}`;
     image.alt = 'Meme ' + meme.id;
     const button = document.createElement('button');
     button.className = 'like-button';
     const update = () => {
-        button.classList.toggle('liked', likedMemes.has(meme.index));
-        button.textContent = likedMemes.has(meme.index) ? '❤️' : '🤍';
+        button.classList.toggle('liked', likedMemes.has(meme.id));
+        button.textContent = likedMemes.has(meme.id) ? '❤️' : '🤍';
     };
     update();
     button.onclick = async event => {
         event.stopPropagation(); button.disabled = true;
         try {
-            const liked = likedMemes.has(meme.index);
-            const result = await api('/feedback', {index:meme.index,action:liked ? 'unlike':'like'});
-            if (liked) likedMemes.delete(meme.index); else likedMemes.add(meme.index);
+            const liked = likedMemes.has(meme.id);
+            const result = await api('/feedback', {id:meme.id,action:liked ? 'unlike':'like'});
+            if (liked) likedMemes.delete(meme.id); else likedMemes.add(meme.id);
             document.getElementById('likedCount').textContent = result.liked_count;
             update();
         } catch (error) { alert(error.message); }
@@ -69,20 +69,20 @@ function appendCard(meme) {
     };
     card.append(image, button);
     document.getElementById('feedContainer').append(card);
-    card.dataset.index = meme.index;
+    card.dataset.id = meme.id;
     observer.observe(card);
 }
 observer = new IntersectionObserver(async entries => {
     for (const entry of entries) {
         if (!entry.isIntersecting) continue;
-        const index = Number(entry.target.dataset.index);
-        if (seen.has(index)) continue;
-        seen.add(index);
+        const id = entry.target.dataset.id;
+        if (seen.has(id)) continue;
+        seen.add(id);
         try {
-            await api('/feedback', {index,action:'seen'});
+            await api('/feedback', {id,action:'seen'});
             observer.unobserve(entry.target);
-            if (memeQueue.slice(-3).some(meme => meme.index === index)) await loadMoreMemes();
-        } catch (error) { seen.delete(index); console.error(error); }
+            if (memeQueue.slice(-3).some(meme => meme.id === id)) await loadMoreMemes();
+        } catch (error) { seen.delete(id); console.error(error); }
     }
 }, {threshold:0.5});
 async function getRecommendations() {
