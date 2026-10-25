@@ -15,6 +15,7 @@ template<class F> void rejects(F f) {
 }
 int main() {
     auto dir = std::filesystem::temp_directory_path() / "meme-recommender-test";
+    std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
     auto csv = (dir / "vectors.csv").string();
     auto paths = (dir / "paths.json").string();
@@ -72,6 +73,29 @@ int main() {
     std::ofstream(manifest_path) << invalid;
     rejects([&] { r.load_catalog(manifest_path); });
     require(r.version() == "test-v1");
+    // A relative name must not escape the artifact through a symlink.
+    const auto outside = dir.parent_path() / "meme-recommender-test-outside";
+    std::filesystem::create_directories(outside);
+    std::ofstream(outside / "vectors.csv") << "0,1\n1,0\n";
+    std::ofstream(outside / "private.jpg") << "outside-image";
+    std::filesystem::create_directory_symlink(outside, dir / "external");
+    for (const bool vectors : {true, false}) {
+        invalid = manifest;
+        if (vectors) invalid["vectors"] = "external/vectors.csv";
+        else invalid["items"][0]["path"] = "external/private.jpg";
+        std::ofstream(manifest_path) << invalid;
+        rejects([&] { r.load_catalog(manifest_path); });
+        require(r.version() == "test-v1");
+        require(r.get_ids() == std::vector<std::string>({"a","b"}));
+        require(r.recommend({0,1},1) == std::vector<int>{1});
+    }
+    std::filesystem::create_symlink(dir / "a.jpg", dir / "internal.jpg");
+    auto internal = manifest;
+    internal["items"][0]["path"] = "internal.jpg";
+    std::ofstream(manifest_path) << internal;
+    r.load_catalog(manifest_path);
+    require(r.get_paths()[0] == std::filesystem::canonical(dir / "a.jpg").string());
+    std::filesystem::remove_all(outside);
     std::filesystem::remove_all(dir);
     std::cout << "Ranking, boundaries and atomic-load regressions passed\n";
 }
