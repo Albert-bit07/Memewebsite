@@ -31,7 +31,8 @@ UserStore::UserStore(const std::string& path, const Recommender& catalog, std::s
         execute("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;");
         execute("CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP);"
                 "CREATE TABLE IF NOT EXISTS preferences(session TEXT REFERENCES sessions(token), item_id TEXT, liked INTEGER NOT NULL, seen INTEGER NOT NULL, PRIMARY KEY(session,item_id));"
-                "CREATE TABLE IF NOT EXISTS feedback_events(id INTEGER PRIMARY KEY, session TEXT REFERENCES sessions(token), item_id TEXT NOT NULL, action TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);");
+                "CREATE TABLE IF NOT EXISTS feedback_events(id INTEGER PRIMARY KEY, session TEXT REFERENCES sessions(token), item_id TEXT NOT NULL, action TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);"
+                "CREATE INDEX IF NOT EXISTS feedback_events_session_id ON feedback_events(session,id);");
     } catch (...) { sqlite3_close(db_); throw; }
 }
 UserStore::~UserStore() { sqlite3_close(db_); }
@@ -111,6 +112,11 @@ std::size_t UserStore::feedback(const std::string& session, int index, const std
         update.bind(1,session); update.bind(2,id); update.bind(3,liked ? "1":"0"); update.row();
         Statement event(db_, "INSERT INTO feedback_events(session,item_id,action) VALUES(?,?,?)");
         event.bind(1,session); event.bind(2,id); event.bind(3,action); event.row();
+        // History is diagnostic, not the source of preference reconstruction.
+        // Bound it in the same transaction so pruning failure cannot lose a transition.
+        Statement prune(db_, "DELETE FROM feedback_events WHERE session=? AND id <= "
+                             "(SELECT id FROM feedback_events WHERE session=? ORDER BY id DESC LIMIT 1 OFFSET 1000)");
+        prune.bind(1,session); prune.bind(2,session); prune.row();
         execute("COMMIT");
     } catch (...) { sqlite3_exec(db_,"ROLLBACK",nullptr,nullptr,nullptr); throw; }
     // Rebuild from durable state if allocation fails after commit.

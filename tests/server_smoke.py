@@ -216,3 +216,52 @@ with tempfile.TemporaryDirectory() as temporary:
         assert b'MEME_MAX_SESSIONS' in result.stderr
         assert not unused.exists(), 'Invalid config opened a database'
     print('Concurrent session cap, reuse, restart, reduced limit, freed capacity and invalid configuration passed')
+
+with tempfile.TemporaryDirectory() as temporary:
+    database = Path(temporary) / 'history.sqlite3'
+    process = start(binary, database)
+    try:
+        alice, bob = Client(), Client()
+        for client in (alice, bob):
+            client.request('/session', {})
+            client.request('/feedback', {'id':IDS[0], 'action':'like'})
+        token = next(iter(alice.cookies)).value
+        # Simulate a pre-upgrade event history; preference rows remain authoritative.
+        with sqlite3.connect(database) as connection:
+            connection.executemany('INSERT INTO feedback_events(session,item_id,action) VALUES(?,?,?)',
+                [(token, IDS[0], 'like')] * 1005)
+            old_ids = [row[0] for row in connection.execute(
+                'SELECT id FROM feedback_events WHERE session=? ORDER BY id', (token,))]
+            connection.execute("CREATE TRIGGER fail_prune BEFORE DELETE ON feedback_events BEGIN SELECT RAISE(ABORT,'injected failure'); END")
+        stop(process); process = start(binary, database)
+        try:
+            alice.request('/feedback', {'id':IDS[0], 'action':'unlike'})
+            raise AssertionError('Failed history pruning accepted')
+        except urllib.error.HTTPError as error:
+            assert error.code == 500
+        assert alice.request('/status')['liked_count'] == 1
+        with sqlite3.connect(database) as connection:
+            assert [row[0] for row in connection.execute(
+                'SELECT id FROM feedback_events WHERE session=? ORDER BY id', (token,))] == old_ids
+            assert connection.execute('SELECT liked FROM preferences WHERE session=?', (token,)).fetchone()[0] == 1
+            connection.execute('DROP TRIGGER fail_prune')
+        assert alice.request('/feedback', {'id':IDS[0], 'action':'unlike'})['liked_count'] == 0
+        with sqlite3.connect(database) as connection:
+            retained = list(connection.execute('SELECT id,action FROM feedback_events WHERE session=? ORDER BY id', (token,)))
+            assert len(retained) == 1000
+            assert [row[0] for row in retained[:-1]] == old_ids[-999:]
+            assert retained[-1][1] == 'unlike'
+            assert connection.execute('SELECT COUNT(*) FROM feedback_events WHERE session<>?', (token,)).fetchone()[0] == 1
+        alice.request('/feedback', {'id':IDS[0], 'action':'unlike'})
+        with sqlite3.connect(database) as connection:
+            assert list(connection.execute('SELECT id,action FROM feedback_events WHERE session=? ORDER BY id', (token,))) == retained
+        stop(process); process = start(binary, database)
+        assert alice.request('/status')['liked_count'] == 0
+        assert bob.request('/status')['liked_count'] == 1
+        for action in ['like', 'unlike'] * 3:
+            alice.request('/feedback', {'id':IDS[0], 'action':action})
+            with sqlite3.connect(database) as connection:
+                assert connection.execute('SELECT COUNT(*) FROM feedback_events WHERE session=?', (token,)).fetchone()[0] == 1000
+        print('Bounded event history, newest retention, rollback, isolation, duplicate feedback and restart passed')
+    finally:
+        stop(process)
