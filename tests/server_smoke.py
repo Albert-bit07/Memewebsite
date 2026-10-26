@@ -23,9 +23,9 @@ class Client:
     def __init__(self):
         self.cookies = http.cookiejar.CookieJar()
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
-    def request(self, path, body=None):
+    def request(self, path, body=None, method=None):
         data = None if body is None else json.dumps(body).encode()
-        req = urllib.request.Request(BASE + path, data=data, headers={'Content-Type':'application/json'})
+        req = urllib.request.Request(BASE + path, data=data, headers={'Content-Type':'application/json'}, method=method)
         with self.opener.open(req, timeout=5) as response:
             return json.load(response)
 
@@ -124,6 +124,47 @@ with tempfile.TemporaryDirectory() as temporary:
         assert bob.request('/feedback', {'id':IDS[1], 'action':'unlike'})['liked_count'] == 0
         with urllib.request.urlopen(BASE + image_path(IDS[1])) as response:
             assert response.read() == before
-        print('Independent sessions, duplicate feedback, seen filtering, concurrent ranking and restart recovery and reordered-catalog identity passed')
+        # Revocation removes only the caller's data and survives restart.
+        assert bob.request('/feedback', {'id':IDS[1], 'action':'like'})['liked_count'] == 1
+        carol = Client()
+        carol.request('/session', {})
+        carol.request('/feedback', {'id':IDS[0], 'action':'like'})
+        token = next(iter(carol.cookies)).value
+        with sqlite3.connect(database) as connection:
+            connection.execute("CREATE TRIGGER fail_delete BEFORE DELETE ON sessions BEGIN SELECT RAISE(ABORT,'injected failure'); END")
+        try:
+            carol.request('/session', method='DELETE')
+            raise AssertionError('Failed deletion accepted')
+        except urllib.error.HTTPError as error: assert error.code == 500
+        assert next(iter(carol.cookies)).value == token
+        assert carol.request('/status')['liked_count'] == 1
+        with sqlite3.connect(database) as connection:
+            for table, column in [('sessions','token'),('preferences','session'),('feedback_events','session')]:
+                assert connection.execute(f'SELECT COUNT(*) FROM {table} WHERE {column}=?',(token,)).fetchone()[0] == 1
+            connection.execute('DROP TRIGGER fail_delete')
+        assert carol.request('/session', method='DELETE')['status'] == 'ok'
+        assert len(carol.cookies) == 0
+        with sqlite3.connect(database) as connection:
+            for table, column in [('sessions','token'),('preferences','session'),('feedback_events','session')]:
+                assert connection.execute(f'SELECT COUNT(*) FROM {table} WHERE {column}=?',(token,)).fetchone()[0] == 0
+        stop(process); process = start(binary, database, replacement / 'catalog.json')
+        revoked = urllib.request.Request(BASE+'/status',headers={'Cookie':'meme_session='+token})
+        try:
+            urllib.request.urlopen(revoked,timeout=5)
+            raise AssertionError('Revoked cookie accepted after restart')
+        except urllib.error.HTTPError as error: assert error.code == 401
+        assert alice.request('/status')['liked_count'] == 0
+        assert bob.request('/status')['liked_count'] == 1
+        assert carol.request('/session', method='DELETE')['status'] == 'ok'
+        carol.request('/session', {})
+        assert next(iter(carol.cookies)).value != token
+        assert carol.request('/status')['liked_count'] == 0
+        cross_site = urllib.request.Request(BASE+'/session',method='DELETE',headers={'Cookie':'meme_session='+next(iter(carol.cookies)).value,'Origin':'https://hostile.test'})
+        try:
+            urllib.request.urlopen(cross_site,timeout=5)
+            raise AssertionError('Cross-site revocation accepted')
+        except urllib.error.HTTPError as error: assert error.code == 403
+        assert carol.request('/status')['liked_count'] == 0
+        print('Independent sessions, duplicate feedback, seen filtering, concurrent ranking and restart recovery, reordered-catalog identity and transactional session revocation passed')
     finally:
         stop(process)

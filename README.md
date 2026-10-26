@@ -84,3 +84,26 @@ Generate and validate a new artifact in a separate immutable directory, then ato
 Candidate loading and ID-map construction occur before publication, while ordinary requests continue. A shared catalog lock allows concurrent serving; reload takes the exclusive lock only after validation, clears derived user caches and publishes the catalog and lookup together. Each request holds its shared lock through ranking or image reading, so a reload may wait for a long request. Reload preparations are serialized to prevent an older candidate overtaking a newer one. Subsequent session access reconstructs preferences from SQLite stable IDs against the new vectors and dimension. Removed items disappear from current preferences but remain in history and are restored if reintroduced. This avoids holding the user-state mutex during candidate ranking; it is not a lock-free or multi-instance design.
 
 The synthetic native HTTP reload test covers authorization, changed vector dimensions, reordered/removed/reintroduced IDs, invalid-artifact retention, concurrent reads and feedback during repeated updates, and restart persistence. It does not establish production load capacity or recommendation relevance.
+
+### Revoking a session
+
+`DELETE /session` uses the current `meme_session` cookie to revoke that session
+and remove its preferences and feedback events in one SQLite transaction. It
+expires the browser cookie only after commit. Repeating the request, including
+with no cookie, succeeds without creating a session. Cross-site requests are
+rejected by the same origin checks used by the other endpoints.
+
+From the local demo's browser console:
+
+```javascript
+await fetch('/session', { method: 'DELETE' });
+location.reload(); // The feed starts a new, empty session.
+```
+
+Deletion affects only the caller's session, and a copied old cookie remains
+invalid after a server restart. A database failure returns 500 and retains the
+session and its data so the request can be retried. This is logical deletion,
+not a promise of physical erasure from SQLite pages, WAL files or backups.
+Inactive sessions are not automatically purged; storage quotas, retention
+policy and request rate limits remain future work. Requests already in flight
+may have read the previous session state before revocation commits.

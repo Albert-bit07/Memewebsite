@@ -85,6 +85,11 @@ int main(int argc, char** argv) {
             }
             respond(res,{{"status","ok"}});
         });
+        server.Delete("/session",[&](const httplib::Request& req, httplib::Response& res) {
+            users.delete_session(session_token(req));
+            res.set_header("Set-Cookie","meme_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");
+            respond(res,{{"status","ok"}});
+        });
         server.Get("/status",[&](const httplib::Request& req, httplib::Response& res) {
             std::shared_lock<std::shared_mutex> generation(catalog_mutex);
             const auto state=users.snapshot(session_token(req));

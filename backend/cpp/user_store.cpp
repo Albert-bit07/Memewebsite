@@ -47,6 +47,26 @@ std::string UserStore::create_session() {
     if (!insert.row()) throw std::runtime_error("Cannot create session");
     return insert.text(0);
 }
+void UserStore::delete_session(const std::string& session) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    // Children and bearer token disappear together; a failed commit leaves the
+    // live cache usable and durable preferences intact for a retry.
+    execute("BEGIN IMMEDIATE");
+    try {
+        for (const char* sql : {"DELETE FROM feedback_events WHERE session=?",
+                                "DELETE FROM preferences WHERE session=?",
+                                "DELETE FROM sessions WHERE token=?"}) {
+            Statement remove(db_, sql);
+            remove.bind(1, session);
+            remove.row();
+        }
+        execute("COMMIT");
+    } catch (...) {
+        sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
+        throw;
+    }
+    states_.erase(session);
+}
 UserStore::State& UserStore::load(const std::string& session) {
     Statement exists(db_, "SELECT 1 FROM sessions WHERE token=?"); exists.bind(1,session);
     if (session.size() != 64 || !exists.row()) throw std::invalid_argument("Unknown session");
