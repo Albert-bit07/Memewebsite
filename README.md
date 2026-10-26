@@ -104,8 +104,8 @@ Deletion affects only the caller's session, and a copied old cookie remains
 invalid after a server restart. A database failure returns 500 and retains the
 session and its data so the request can be retried. This is logical deletion,
 not a promise of physical erasure from SQLite pages, WAL files or backups.
-Inactive sessions are not automatically purged; storage quotas, retention
-policy and request rate limits remain future work. Requests already in flight
+Inactive sessions are not automatically purged; database byte quotas and
+request rate limits remain future work. Requests already in flight
 may have read the previous session state before revocation commits.
 
 ### Session capacity
@@ -126,5 +126,23 @@ blocks new sessions until the count falls below the limit. Invalid configuration
 fails startup before opening the user database.
 
 This is an admission limit, not a measured serving-capacity recommendation or a
-rate limiter. It does not cap feedback-event history, database bytes or request
-rates. Automatic retention and per-client abuse controls remain unimplemented.
+rate limiter. It does not cap database bytes or request rates. Session expiration
+and per-client abuse controls remain unimplemented.
+
+### Bounded transition history
+
+Each successful state-changing feedback request retains only that session's
+newest 1,000 transition events, ordered by database ID. Event insertion, preference
+updates and pruning commit together; any failure rolls them all back before
+changing the in-memory preference. Duplicate feedback creates no transition.
+A `(session, id)` index supports scoped retention and session deletion.
+
+The event log is a rolling diagnostic history, not a complete audit trail. Durable
+per-item preferences are retained independently and reconstruct likes/seen state
+after restart, even after their original events expire. Existing larger histories
+are pruned on that session's next state-changing feedback request; startup and
+duplicate requests do not delete history. Other sessions are unaffected. The
+1,000-event limit is a storage policy, not a benchmark-derived capacity estimate.
+SQLite may reuse freed pages without shrinking the database file, and preferences
+for removed catalog IDs remain stored. This does not bound database bytes, request
+rates, or total inactive-session storage.
