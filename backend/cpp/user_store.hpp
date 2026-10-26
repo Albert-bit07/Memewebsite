@@ -21,6 +21,7 @@ public:
     // Caller must exclude catalog readers until replacement is complete.
     void clear_cached_preferences();
     std::string create_session();
+    void delete_session(const std::string& session);
     UserSnapshot snapshot(const std::string& session);
     std::size_t feedback(const std::string& session, int index, const std::string& action);
 private:
