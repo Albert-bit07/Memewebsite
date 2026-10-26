@@ -24,7 +24,8 @@ private:
 };
 }
 
-UserStore::UserStore(const std::string& path, const Recommender& catalog) : catalog_(catalog) {
+UserStore::UserStore(const std::string& path, const Recommender& catalog, std::size_t max_sessions) : catalog_(catalog), max_sessions_(max_sessions) {
+    if (max_sessions == 0 || max_sessions > 1000000) throw std::invalid_argument("Invalid session capacity");
     if (sqlite3_open(path.c_str(), &db_) != SQLITE_OK) { sqlite3_close(db_); throw std::runtime_error("Cannot open user database"); }
     try {
         execute("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;");
@@ -43,8 +44,11 @@ void UserStore::clear_cached_preferences() {
 }
 std::string UserStore::create_session() {
     std::lock_guard<std::mutex> guard(mutex_);
-    Statement insert(db_, "INSERT INTO sessions(token) VALUES(lower(hex(randomblob(32)))) RETURNING token");
-    if (!insert.row()) throw std::runtime_error("Cannot create session");
+    // Count and insert share a single SQLite write statement, including when
+    // another connection uses this database. Existing sessions are never evicted.
+    Statement insert(db_, "INSERT INTO sessions(token) SELECT lower(hex(randomblob(32))) WHERE (SELECT COUNT(*) FROM sessions) < CAST(? AS INTEGER) RETURNING token");
+    insert.bind(1, std::to_string(max_sessions_));
+    if (!insert.row()) throw SessionCapacityReached();
     return insert.text(0);
 }
 void UserStore::delete_session(const std::string& session) {
