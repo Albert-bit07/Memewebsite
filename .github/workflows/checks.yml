@@ -19,5 +19,6 @@ jobs:
           node-version: '22'
       - run: node tests/frontend_test.cjs
       - run: python tests/server_smoke.py build/backend/cpp/recommender
+      - run: python tests/catalog_reload.py build/backend/cpp/recommender
       - run: python -m unittest discover -s tests -p "test_*.py" -v
       - run: build/backend/cpp/retrieval_benchmark

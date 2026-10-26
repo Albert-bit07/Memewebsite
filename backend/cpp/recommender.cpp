@@ -61,7 +61,10 @@ const std::vector<std::vector<float>>&  Recommender::get_embeddings() const{retu
 
 void Recommender::load_catalog(const std::string& manifest) {
     namespace fs = std::filesystem;
-    std::ifstream file(manifest);
+    // Pin a symlinked artifact directory once so manifest and files come from
+    // the same generation even if the operator switches the pointer again.
+    const auto manifest_path = fs::canonical(manifest);
+    std::ifstream file(manifest_path);
     if (!file) throw std::runtime_error("Cannot open catalog manifest");
     const auto doc = nlohmann::json::parse(file);
     if (!doc.at("schema_version").is_number_integer() || doc.at("schema_version") != 1 || doc.at("catalog_version").get<std::string>().empty() || doc.at("model_version").get<std::string>().empty()) {
@@ -71,7 +74,7 @@ void Recommender::load_catalog(const std::string& manifest) {
         !doc.at("items").is_array()) {
         throw std::runtime_error("Catalog dimension must be a positive integer and items must be an array");
     }
-    const auto root = fs::canonical(fs::absolute(manifest).parent_path());
+    const auto root = manifest_path.parent_path();
     auto artifact_path = [&](const std::string& value) {
         fs::path relative(value);
         if (relative.empty() || relative.is_absolute()) throw std::runtime_error("Catalog paths must be relative");

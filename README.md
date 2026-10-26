@@ -19,7 +19,7 @@ flowchart TD
   S --> B
 ```
 
-Python generates vectors, images and a manifest into a new artifact directory. C++ validates metadata, dimensions, item IDs, file paths and vector values before replacing a loaded catalog. A failed load leaves the previous catalog intact. The server loads its catalog at startup; live HTTP catalog replacement is not yet exposed.
+Python generates vectors, images and a manifest into a new artifact directory. C++ validates metadata, dimensions, item IDs, file paths and vector values before replacing a loaded catalog. A failed load leaves the previous catalog intact. The server loads its catalog at startup and supports an opt-in administrator reload of the configured manifest.
 
 ## Build and run
 
@@ -68,8 +68,19 @@ HTTP clients use the stable `id` returned by `GET /recommend`: send `{"id":"..."
 
 ## Current boundaries and next milestones
 
-This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery, session expiration cleanup or rate limiting. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, live catalog replacement, concurrent-load measurements and relevance evaluation remain outstanding.
+This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery, session expiration cleanup or rate limiting. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, concurrent-load measurements and relevance evaluation remain outstanding.
 
 CI builds the full native server, runs catalog/preference regressions, and tests independent HTTP sessions, duplicate feedback, concurrent ranking, seen filtering and preference reconstruction across server restarts, including a reordered catalog and stable image/feedback identity. Catalog tests reject invalid schema versions, dimensions, duplicate IDs, path traversal and symlink escapes while preserving the prior loaded version. There is no production deployment or formal verification claim.
 
 **Ownership:** collaborative repository; Albert authored the original [CLIP integration](https://github.com/Albert-bit07/Memewebsite/commit/bb6ad40a65eae81cee159e1aaf0b4f2e9fee0568). Subsequent engineering work is visible in commit and PR history.
+
+
+## Replacing a catalog while serving
+
+Set `MEME_ADMIN_TOKEN` to a locally generated random token of at least 32 characters before starting the server. Without it, the reload route returns 404. With it, `POST /admin/reload` requires `Authorization: Bearer <token>` and reloads only the manifest path passed at startup; requests cannot select a filesystem path. The token is not used by the public feed and must not be embedded in frontend code. This remains a loopback, single-instance demo.
+
+Generate and validate a new artifact in a separate immutable directory, then atomically replace the configured manifest (or its parent-directory symlink) to point at it. Keep old artifact directories available until all requests using them finish; retaining them also permits rollback. Do not overwrite vector or image files in place. Send the authenticated reload request after publishing the manifest. Validation failure returns 422 and leaves the current catalog and preferences serving normally. A rejected reload does not repair the manifest on disk: restore a valid manifest before restarting the process. To roll back, restore the previous manifest and reload it.
+
+Candidate loading and ID-map construction occur before publication, while ordinary requests continue. A shared catalog lock allows concurrent serving; reload takes the exclusive lock only after validation, clears derived user caches and publishes the catalog and lookup together. Each request holds its shared lock through ranking or image reading, so a reload may wait for a long request. Reload preparations are serialized to prevent an older candidate overtaking a newer one. Subsequent session access reconstructs preferences from SQLite stable IDs against the new vectors and dimension. Removed items disappear from current preferences but remain in history and are restored if reintroduced. This avoids holding the user-state mutex during candidate ranking; it is not a lock-free or multi-instance design.
+
+The synthetic native HTTP reload test covers authorization, changed vector dimensions, reordered/removed/reintroduced IDs, invalid-artifact retention, concurrent reads and feedback during repeated updates, and restart persistence. It does not establish production load capacity or recommendation relevance.
