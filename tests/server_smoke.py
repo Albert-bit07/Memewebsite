@@ -2,6 +2,7 @@
 import concurrent.futures
 import http.cookiejar
 import json
+import os
 import shutil
 import urllib.parse
 from pathlib import Path
@@ -35,8 +36,10 @@ def stop(process):
     except subprocess.TimeoutExpired:
         process.kill(); process.wait()
 
-def start(binary, database, manifest=DATA / 'catalog.json'):
-    process = subprocess.Popen([binary, str(manifest), str(database)], cwd=Path(__file__).resolve().parents[1] / 'backend', stdout=subprocess.DEVNULL)
+def start(binary, database, manifest=DATA / 'catalog.json', max_sessions=None):
+    environment = os.environ.copy()
+    if max_sessions is not None: environment['MEME_MAX_SESSIONS'] = str(max_sessions)
+    process = subprocess.Popen([binary, str(manifest), str(database)], cwd=Path(__file__).resolve().parents[1] / 'backend', stdout=subprocess.DEVNULL, env=environment)
     for _ in range(100):
         if process.poll() is not None: raise RuntimeError('Server exited before readiness')
         try:
@@ -168,3 +171,48 @@ with tempfile.TemporaryDirectory() as temporary:
         print('Independent sessions, duplicate feedback, seen filtering, concurrent ranking and restart recovery, reordered-catalog identity and transactional session revocation passed')
     finally:
         stop(process)
+
+with tempfile.TemporaryDirectory() as temporary:
+    database = Path(temporary) / 'capacity.sqlite3'
+    process = start(binary, database, max_sessions=2)
+    try:
+        clients = [Client() for _ in range(12)]
+        def register(client):
+            try:
+                client.request('/session', {})
+                return client
+            except urllib.error.HTTPError as error:
+                assert error.code == 503
+                assert error.headers.get('Cache-Control') == 'no-store'
+                assert 'capacity' in json.load(error)['error'].lower()
+                assert len(client.cookies) == 0
+                return None
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            accepted = [client for client in pool.map(register, clients) if client is not None]
+        assert len(accepted) == 2, 'Concurrent registration exceeded session capacity'
+        alice, bob = accepted
+        alice.request('/feedback', {'id':IDS[0], 'action':'like'})
+        old_cookie = next(iter(alice.cookies)).value
+        alice.request('/session', {})
+        assert next(iter(alice.cookies)).value == old_cookie
+        assert alice.request('/status')['liked_count'] == 1
+        with sqlite3.connect(database) as connection:
+            assert connection.execute('SELECT COUNT(*) FROM sessions').fetchone()[0] == 2
+        # Lowering the limit must preserve existing users, even above the new cap.
+        stop(process); process = start(binary, database, max_sessions=1)
+        assert alice.request('/status')['liked_count'] == 1
+        assert register(Client()) is None
+        bob.request('/session', method='DELETE')
+        assert register(Client()) is None
+        alice.request('/session', method='DELETE')
+        assert register(Client()) is not None
+    finally:
+        stop(process)
+    for invalid in ['', '0', '-1', '2abc', '1000001', '999999999999999999999', ' 2', '+2']:
+        unused = Path(temporary) / 'invalid.sqlite3'
+        result = subprocess.run([binary, str(DATA / 'catalog.json'), str(unused)],
+            env={**os.environ, 'MEME_MAX_SESSIONS':invalid}, capture_output=True, timeout=5)
+        assert result.returncode != 0
+        assert b'MEME_MAX_SESSIONS' in result.stderr
+        assert not unused.exists(), 'Invalid config opened a database'
+    print('Concurrent session cap, reuse, restart, reduced limit, freed capacity and invalid configuration passed')

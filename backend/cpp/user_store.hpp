@@ -3,6 +3,7 @@
 #include "recommender.hpp"
 #include <sqlite3.h>
 #include <mutex>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -12,9 +13,14 @@ struct UserSnapshot {
     std::unordered_set<int> seen;
 };
 
+class SessionCapacityReached : public std::runtime_error {
+public:
+    SessionCapacityReached() : std::runtime_error("Session capacity reached") {}
+};
+
 class UserStore {
 public:
-    UserStore(const std::string& path, const Recommender& catalog);
+    UserStore(const std::string& path, const Recommender& catalog, std::size_t max_sessions = 10000);
     ~UserStore();
     UserStore(const UserStore&) = delete;
     UserStore& operator=(const UserStore&) = delete;
@@ -34,6 +40,7 @@ private:
     void execute(const char* sql);
     sqlite3* db_ = nullptr;
     const Recommender& catalog_;
+    const std::size_t max_sessions_;
     std::mutex mutex_;
     std::unordered_map<std::string, State> states_;
 };

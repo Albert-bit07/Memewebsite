@@ -3,6 +3,7 @@
 #include "recommender.hpp"
 #include "user_store.hpp"
 #include <algorithm>
+#include <charconv>
 #include <fstream>
 #include <filesystem>
 #include <iostream>
@@ -46,6 +47,14 @@ int main(int argc, char** argv) {
         if (!admin_token.empty() && admin_token.size() < 32) {
             throw std::runtime_error("MEME_ADMIN_TOKEN must contain at least 32 characters");
         }
+        std::size_t max_sessions = 10000;
+        if (const char* setting = std::getenv("MEME_MAX_SESSIONS")) {
+            const std::string value(setting);
+            const auto parsed = std::from_chars(value.data(), value.data()+value.size(), max_sessions);
+            if (parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size() || max_sessions == 0 || max_sessions > 1000000) {
+                throw std::runtime_error("MEME_MAX_SESSIONS must be an integer from 1 to 1000000");
+            }
+        }
         Recommender catalog;
         catalog.load_catalog(manifest);
         auto item_indices = item_lookup(catalog);
@@ -56,7 +65,7 @@ int main(int argc, char** argv) {
             if (found == item_indices.end()) throw std::invalid_argument("Unknown item");
             return found->second;
         };
-        UserStore users(argc > 2 ? argv[2] : "data/users.sqlite3",catalog);
+        UserStore users(argc > 2 ? argv[2] : "data/users.sqlite3",catalog,max_sessions);
         httplib::Server server;
         server.set_payload_max_length(4096);
         server.set_mount_point("/",argc > 3 ? argv[3] : "../frontend");
@@ -80,7 +89,10 @@ int main(int argc, char** argv) {
             auto token = session_token(req);
             try { users.snapshot(token); }
             catch (const std::invalid_argument&) {
-                token = users.create_session();
+                try { token = users.create_session(); }
+                catch (const SessionCapacityReached&) {
+                    res.status=503; respond(res,{{"error","Session capacity reached; existing sessions remain available"}}); return;
+                }
                 res.set_header("Set-Cookie","meme_session="+token+"; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000");
             }
             respond(res,{{"status","ok"}});

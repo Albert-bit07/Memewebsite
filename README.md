@@ -107,3 +107,24 @@ not a promise of physical erasure from SQLite pages, WAL files or backups.
 Inactive sessions are not automatically purged; storage quotas, retention
 policy and request rate limits remain future work. Requests already in flight
 may have read the previous session state before revocation commits.
+
+### Session capacity
+
+`MEME_MAX_SESSIONS` bounds the number of stored sessions (default **10000**;
+accepted range **1–1000000**). Configure it before starting the native server:
+
+```bash
+MEME_MAX_SESSIONS=2000 ./build/backend/cpp/recommender backend/data/catalog.json data/users.sqlite3 frontend
+```
+
+The count check and creation happen in one SQLite write statement. At capacity,
+`POST /session` returns **503** with a JSON error and no new cookie. Existing
+sessions continue to work, including repeated `POST /session` calls with a valid
+cookie. Deleting a session frees one slot. The count survives process restarts;
+lowering the limit below the current count preserves all existing data and
+blocks new sessions until the count falls below the limit. Invalid configuration
+fails startup before opening the user database.
+
+This is an admission limit, not a measured serving-capacity recommendation or a
+rate limiter. It does not cap feedback-event history, database bytes or request
+rates. Automatic retention and per-client abuse controls remain unimplemented.
