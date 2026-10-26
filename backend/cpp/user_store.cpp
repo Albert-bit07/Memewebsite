@@ -37,6 +37,10 @@ UserStore::~UserStore() { sqlite3_close(db_); }
 void UserStore::execute(const char* sql) {
     if (sqlite3_exec(db_, sql, nullptr, nullptr, nullptr) != SQLITE_OK) throw std::runtime_error("User storage transaction failed");
 }
+void UserStore::clear_cached_preferences() {
+    std::lock_guard<std::mutex> guard(mutex_);
+    states_.clear();
+}
 std::string UserStore::create_session() {
     std::lock_guard<std::mutex> guard(mutex_);
     Statement insert(db_, "INSERT INTO sessions(token) VALUES(lower(hex(randomblob(32)))) RETURNING token");

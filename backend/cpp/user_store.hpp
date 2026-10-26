@@ -18,6 +18,8 @@ public:
     ~UserStore();
     UserStore(const UserStore&) = delete;
     UserStore& operator=(const UserStore&) = delete;
+    // Caller must exclude catalog readers until replacement is complete.
+    void clear_cached_preferences();
     std::string create_session();
     UserSnapshot snapshot(const std::string& session);
     std::size_t feedback(const std::string& session, int index, const std::string& action);
