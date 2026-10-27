@@ -2,6 +2,7 @@
 #include "json.hpp"
 #include "recommender.hpp"
 #include "user_store.hpp"
+#include "session_admission.hpp"
 #include <algorithm>
 #include <charconv>
 #include <fstream>
@@ -55,6 +56,15 @@ int main(int argc, char** argv) {
                 throw std::runtime_error("MEME_MAX_SESSIONS must be an integer from 1 to 1000000");
             }
         }
+        std::size_t creations_per_minute = 60;
+        if (const char* setting = std::getenv("MEME_SESSION_CREATIONS_PER_MINUTE")) {
+            const std::string value(setting);
+            const auto parsed = std::from_chars(value.data(), value.data()+value.size(), creations_per_minute);
+            if (parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size() || creations_per_minute == 0 || creations_per_minute > 60000) {
+                throw std::runtime_error("MEME_SESSION_CREATIONS_PER_MINUTE must be an integer from 1 to 60000");
+            }
+        }
+        SessionAdmission admission(creations_per_minute);
         Recommender catalog;
         catalog.load_catalog(manifest);
         auto item_indices = item_lookup(catalog);
@@ -89,6 +99,12 @@ int main(int argc, char** argv) {
             auto token = session_token(req);
             try { users.snapshot(token); }
             catch (const std::invalid_argument&) {
+                const int retry_after = admission.retry_after();
+                if (retry_after > 0) {
+                    res.status=429;
+                    res.set_header("Retry-After",std::to_string(retry_after));
+                    respond(res,{{"error","Session creation rate exceeded; retry later"}}); return;
+                }
                 try { token = users.create_session(); }
                 catch (const SessionCapacityReached&) {
                     res.status=503; respond(res,{{"error","Session capacity reached; existing sessions remain available"}}); return;

@@ -36,9 +36,10 @@ def stop(process):
     except subprocess.TimeoutExpired:
         process.kill(); process.wait()
 
-def start(binary, database, manifest=DATA / 'catalog.json', max_sessions=None):
+def start(binary, database, manifest=DATA / 'catalog.json', max_sessions=None, creations_per_minute=None):
     environment = os.environ.copy()
     if max_sessions is not None: environment['MEME_MAX_SESSIONS'] = str(max_sessions)
+    if creations_per_minute is not None: environment['MEME_SESSION_CREATIONS_PER_MINUTE'] = str(creations_per_minute)
     process = subprocess.Popen([binary, str(manifest), str(database)], cwd=Path(__file__).resolve().parents[1] / 'backend', stdout=subprocess.DEVNULL, env=environment)
     for _ in range(100):
         if process.poll() is not None: raise RuntimeError('Server exited before readiness')
@@ -265,3 +266,47 @@ with tempfile.TemporaryDirectory() as temporary:
         print('Bounded event history, newest retention, rollback, isolation, duplicate feedback and restart passed')
     finally:
         stop(process)
+
+
+with tempfile.TemporaryDirectory() as temporary:
+    database = Path(temporary) / 'admission.sqlite3'
+    process = start(binary, database, creations_per_minute=1)
+    try:
+        alice = Client()
+        alice.request('/session', {})
+        token = next(iter(alice.cookies)).value
+        for _ in range(3):
+            alice.request('/session', {})
+        assert next(iter(alice.cookies)).value == token
+        alice.request('/feedback', {'id':IDS[0], 'action':'like'})
+        assert alice.request('/status')['liked_count'] == 1
+        assert alice.request('/recommend')['recommendations']
+        def rejected(_):
+            client = Client()
+            try:
+                client.request('/session', {})
+                raise AssertionError('Session admission limit bypassed')
+            except urllib.error.HTTPError as error:
+                assert error.code == 429
+                assert 1 <= int(error.headers['Retry-After']) <= 60
+                assert error.headers['Cache-Control'] == 'no-store'
+                assert 'rate' in json.load(error)['error']
+                assert not list(client.cookies)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(rejected, range(16)))
+        with sqlite3.connect(database) as connection:
+            assert connection.execute('SELECT COUNT(*) FROM sessions').fetchone()[0] == 1
+        alice.request('/session', method='DELETE')
+        rejected(None)  # Deletion must not reset the process-wide window.
+        stop(process); process = start(binary, database, creations_per_minute=1)
+        Client().request('/session', {})  # The rolling window is deliberately in memory.
+    finally:
+        stop(process)
+    for invalid in ['', '0', '-1', '2abc', '60001', '999999999999999999999', ' 2', '+2']:
+        unused = Path(temporary) / 'invalid-rate.sqlite3'
+        result = subprocess.run([binary, str(DATA / 'catalog.json'), str(unused)],
+            env={**os.environ, 'MEME_SESSION_CREATIONS_PER_MINUTE':invalid}, capture_output=True, timeout=5)
+        assert result.returncode != 0
+        assert b'MEME_SESSION_CREATIONS_PER_MINUTE' in result.stderr
+        assert not unused.exists()
+    print('Session creation rate, concurrency, existing-user bypass, deletion, restart and config passed')
