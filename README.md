@@ -68,7 +68,7 @@ HTTP clients use the stable `id` returned by `GET /recommend`: send `{"id":"..."
 
 ## Current boundaries and next milestones
 
-This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery, session expiration cleanup or rate limiting. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, concurrent-load measurements and relevance evaluation remain outstanding.
+This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery or session expiration cleanup. New-session attempts have a process-wide rate limit; other request routes do not. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, concurrent-load measurements and relevance evaluation remain outstanding.
 
 CI builds the full native server, runs catalog/preference regressions, and tests independent HTTP sessions, duplicate feedback, concurrent ranking, seen filtering and preference reconstruction across server restarts, including a reordered catalog and stable image/feedback identity. Catalog tests reject invalid schema versions, dimensions, duplicate IDs, path traversal and symlink escapes while preserving the prior loaded version. There is no production deployment or formal verification claim.
 
@@ -105,7 +105,7 @@ invalid after a server restart. A database failure returns 500 and retains the
 session and its data so the request can be retried. This is logical deletion,
 not a promise of physical erasure from SQLite pages, WAL files or backups.
 Inactive sessions are not automatically purged; database byte quotas and
-request rate limits remain future work. Requests already in flight
+rate limits on non-creation routes remain future work. Requests already in flight
 may have read the previous session state before revocation commits.
 
 ### Session capacity
@@ -146,3 +146,22 @@ duplicate requests do not delete history. Other sessions are unaffected. The
 SQLite may reuse freed pages without shrinking the database file, and preferences
 for removed catalog IDs remain stored. This does not bound database bytes, request
 rates, or total inactive-session storage.
+
+
+### Session creation rate
+
+`MEME_SESSION_CREATIONS_PER_MINUTE` limits new-session attempts in a rolling
+60-second window (default **60**, integer range **1–60000**). Valid existing
+cookies bypass this limiter, including repeated `POST /session` calls. New or
+unknown cookies share one process-wide quota, so rotating cookies or client
+addresses cannot bypass it. Exceeding the quota returns **429**, `Retry-After`
+in whole seconds, a JSON error and `Cache-Control: no-store`, without a cookie
+or database insertion. Creation attempts that reach storage consume quota even
+if storage is at capacity or fails; deleting a session does not reset quota.
+
+The bounded in-memory window uses a monotonic clock and a mutex. It resets on
+server restart and is not shared between processes. This protects the local
+demo's creation path, not every route or a public production service. A client
+can consume the shared quota and delay other new visitors; existing sessions
+continue working. The default is an explicit policy, not a measured capacity.
+Session expiry, other request limits and database byte quotas remain future work.
