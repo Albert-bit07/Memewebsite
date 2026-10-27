@@ -54,5 +54,23 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/script.js'), '
         {id: item.id, action: 'unlike'},
         {id: item.id, action: 'seen'},
     ]);
+    let release;
+    let recommendationCalls = 0;
+    const fresh = {id:'fresh.jpg',index:8};
+    context.fetch = async url => {
+        assert.equal(url,'/recommend');
+        recommendationCalls++;
+        if (recommendationCalls === 1) await new Promise(resolve => { release = resolve; });
+        return {ok:true,json:async()=>({recommendations:recommendationCalls === 1 ? [item] : [fresh]})};
+    };
+    const pending = vm.runInContext('loadMoreMemes()',context);
+    await vm.runInContext('getRecommendations()',context);
+    await vm.runInContext('getRecommendations()',context);
+    assert.equal(recommendationCalls,1,'Refresh must not overlap an active recommendation request');
+    release();
+    await pending;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(recommendationCalls,2,'Refresh requested during a load was lost');
+    assert.deepEqual(elements.get('feedContainer').children.map(card=>card.dataset.id),[fresh.id]);
     console.log('Frontend stable-ID image, like, unlike and visibility contracts passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

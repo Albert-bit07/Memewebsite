@@ -2,6 +2,7 @@ const API_URL = '';
 let memeQueue = [];
 let likedMemes = new Set();
 let isLoadingMore = false;
+let refreshRequested = false;
 let exhausted = false;
 let observer;
 const seen = new Set();
@@ -41,6 +42,10 @@ async function loadMoreMemes() {
     finally {
         document.getElementById('loading').style.display = 'none';
         isLoadingMore = false;
+        if (refreshRequested) {
+            refreshRequested = false;
+            await getRecommendations();
+        }
     }
 }
 function appendCard(meme) {
@@ -86,6 +91,8 @@ observer = new IntersectionObserver(async entries => {
     }
 }, {threshold:0.5});
 async function getRecommendations() {
+    // Coalesce refreshes during a load, then request a fresh feed after it settles.
+    if (isLoadingMore) { refreshRequested = true; return; }
     observer.disconnect(); memeQueue = []; exhausted = false;
     document.getElementById('feedContainer').replaceChildren();
     await loadMoreMemes();
