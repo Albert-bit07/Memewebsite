@@ -13,6 +13,11 @@ struct UserSnapshot {
     std::unordered_set<int> seen;
 };
 
+class UnknownSession : public std::runtime_error {
+public:
+    UnknownSession() : std::runtime_error("Unknown session") {}
+};
+
 class SessionCapacityReached : public std::runtime_error {
 public:
     SessionCapacityReached() : std::runtime_error("Session capacity reached") {}

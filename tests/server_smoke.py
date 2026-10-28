@@ -152,11 +152,17 @@ with tempfile.TemporaryDirectory() as temporary:
             for table, column in [('sessions','token'),('preferences','session'),('feedback_events','session')]:
                 assert connection.execute(f'SELECT COUNT(*) FROM {table} WHERE {column}=?',(token,)).fetchone()[0] == 0
         stop(process); process = start(binary, database, replacement / 'catalog.json')
-        revoked = urllib.request.Request(BASE+'/status',headers={'Cookie':'meme_session='+token})
-        try:
-            urllib.request.urlopen(revoked,timeout=5)
-            raise AssertionError('Revoked cookie accepted after restart')
-        except urllib.error.HTTPError as error: assert error.code == 401
+        for path in ['/status', '/recommend', '/feedback']:
+            body = json.dumps({'id':IDS[0], 'action':'like'}).encode() if path == '/feedback' else None
+            revoked = urllib.request.Request(BASE+path, data=body,
+                headers={'Cookie':'meme_session='+token, 'Content-Type':'application/json'})
+            try:
+                urllib.request.urlopen(revoked,timeout=5)
+                raise AssertionError('Revoked cookie accepted after restart')
+            except urllib.error.HTTPError as error:
+                assert error.code == 401
+                assert error.headers['Cache-Control'] == 'no-store'
+                assert json.load(error) == {'error':'Create a session first'}
         assert alice.request('/status')['liked_count'] == 0
         assert bob.request('/status')['liked_count'] == 1
         assert carol.request('/session', method='DELETE')['status'] == 'ok'

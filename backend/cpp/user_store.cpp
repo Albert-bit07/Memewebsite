@@ -74,7 +74,7 @@ void UserStore::delete_session(const std::string& session) {
 }
 UserStore::State& UserStore::load(const std::string& session) {
     Statement exists(db_, "SELECT 1 FROM sessions WHERE token=?"); exists.bind(1,session);
-    if (session.size() != 64 || !exists.row()) throw std::invalid_argument("Unknown session");
+    if (session.size() != 64 || !exists.row()) throw UnknownSession();
     auto found = states_.find(session);
     if (found != states_.end()) return found->second;
     // Cache eviction only removes derived state; durable interactions remain in SQLite.
