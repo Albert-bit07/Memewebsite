@@ -36,10 +36,11 @@ def stop(process):
     except subprocess.TimeoutExpired:
         process.kill(); process.wait()
 
-def start(binary, database, manifest=DATA / 'catalog.json', max_sessions=None, creations_per_minute=None):
+def start(binary, database, manifest=DATA / 'catalog.json', max_sessions=None, creations_per_minute=None, recommendations_per_minute=None):
     environment = os.environ.copy()
     if max_sessions is not None: environment['MEME_MAX_SESSIONS'] = str(max_sessions)
     if creations_per_minute is not None: environment['MEME_SESSION_CREATIONS_PER_MINUTE'] = str(creations_per_minute)
+    if recommendations_per_minute is not None: environment['MEME_RECOMMENDATIONS_PER_MINUTE'] = str(recommendations_per_minute)
     process = subprocess.Popen([binary, str(manifest), str(database)], cwd=Path(__file__).resolve().parents[1] / 'backend', stdout=subprocess.DEVNULL, env=environment)
     for _ in range(100):
         if process.poll() is not None: raise RuntimeError('Server exited before readiness')
@@ -377,3 +378,44 @@ with tempfile.TemporaryDirectory() as temporary:
     finally:
         stop(process)
     print('Absolute session expiry, cache rejection, rollback, restart, replacement and live-user isolation passed')
+
+with tempfile.TemporaryDirectory() as temporary:
+    database = Path(temporary) / 'recommend-rate.sqlite3'
+    process = start(binary, database, recommendations_per_minute=1)
+    try:
+        alice, bob = Client(), Client()
+        for client in (alice, bob): client.request('/session', {})
+        try:
+            Client().request('/recommend')
+            raise AssertionError('Anonymous recommendation accepted')
+        except urllib.error.HTTPError as error:
+            assert error.code == 401
+        assert alice.request('/recommend')['recommendations']
+        def rejected(_):
+            try:
+                bob.request('/recommend')
+                raise AssertionError('Recommendation rate bypassed')
+            except urllib.error.HTTPError as error:
+                assert error.code == 429
+                assert 1 <= int(error.headers['Retry-After']) <= 60
+                assert error.headers['Cache-Control'] == 'no-store'
+                assert 'rate' in json.load(error)['error']
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(rejected, range(16)))
+        # Ranking admission never blocks preference updates or deletion.
+        bob.request('/feedback', {'id':IDS[0], 'action':'like'})
+        assert bob.request('/status')['liked_count'] == 1
+        alice.request('/session', method='DELETE')
+        rejected(None)
+        stop(process); process = start(binary, database, recommendations_per_minute=1)
+        assert bob.request('/recommend')['recommendations']
+    finally:
+        stop(process)
+    for invalid in ['', '0', '-1', '2abc', '60001', '999999999999999999999', ' 2', '+2']:
+        unused = Path(temporary) / 'invalid-recommend-rate.sqlite3'
+        result = subprocess.run([binary, str(DATA / 'catalog.json'), str(unused)],
+            env={**os.environ, 'MEME_RECOMMENDATIONS_PER_MINUTE':invalid}, capture_output=True, timeout=5)
+        assert result.returncode != 0
+        assert b'MEME_RECOMMENDATIONS_PER_MINUTE' in result.stderr
+        assert not unused.exists()
+    print('Recommendation admission, concurrency, independent feedback, restart and config passed')
