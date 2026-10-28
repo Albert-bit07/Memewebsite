@@ -2,6 +2,7 @@
 #include "json.hpp"
 #include "recommender.hpp"
 #include "user_store.hpp"
+#include "request_failure.hpp"
 #include "session_admission.hpp"
 #include <algorithm>
 #include <charconv>
@@ -87,18 +88,19 @@ int main(int argc, char** argv) {
             if (req.path == "/recommend" || req.path == "/feedback" || req.path == "/status") {
                 std::shared_lock<std::shared_mutex> generation(catalog_mutex);
                 try { users.snapshot(session_token(req)); }
-                catch (const std::invalid_argument&) { res.status=401; respond(res,{{"error","Create a session first"}}); return httplib::Server::HandlerResponse::Handled; }
+                catch (const UnknownSession&) { res.status=401; respond(res,{{"error","Create a session first"}}); return httplib::Server::HandlerResponse::Handled; }
             }
             return httplib::Server::HandlerResponse::Unhandled;
         });
-        server.set_exception_handler([](const httplib::Request&, httplib::Response& res, std::exception_ptr) {
-            res.status=500; respond(res,{{"error","Request failed"}});
+        server.set_exception_handler([](const httplib::Request&, httplib::Response& res, std::exception_ptr exception) {
+            const auto failure = request_failure(exception);
+            res.status=failure.status; respond(res,{{"error",failure.message}});
         });
         server.Post("/session",[&](const httplib::Request& req, httplib::Response& res) {
             std::shared_lock<std::shared_mutex> generation(catalog_mutex);
             auto token = session_token(req);
             try { users.snapshot(token); }
-            catch (const std::invalid_argument&) {
+            catch (const UnknownSession&) {
                 const int retry_after = admission.retry_after();
                 if (retry_after > 0) {
                     res.status=429;

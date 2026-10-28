@@ -165,3 +165,19 @@ demo's creation path, not every route or a public production service. A client
 can consume the shared quota and delay other new visitors; existing sessions
 continue working. The default is an explicit policy, not a measured capacity.
 Session expiry, other request limits and database byte quotas remain future work.
+
+
+### Revocation during a request
+
+If revocation commits after pre-routing authentication but before a handler's
+session-state access, that access returns **401** with a no-store JSON error.
+Unknown sessions have a distinct storage exception, so valid feedback is not
+misreported as invalid item/action input and reads do not become internal errors.
+Malformed feedback for a valid session still returns 400; unexpected storage
+errors remain generic 500 responses. Requests that already took their snapshot
+may finish using that snapshot. This does not cancel in-flight responses.
+
+The regression orders authentication, revocation and handler-state access
+explicitly against SQLite and checks the production exception classifier. HTTP
+smoke tests cover normal revoked cookies; no probabilistic timing test or browser
+E2E is claimed for this race.
