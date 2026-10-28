@@ -316,3 +316,64 @@ with tempfile.TemporaryDirectory() as temporary:
         assert b'MEME_SESSION_CREATIONS_PER_MINUTE' in result.stderr
         assert not unused.exists()
     print('Session creation rate, concurrency, existing-user bypass, deletion, restart and config passed')
+
+with tempfile.TemporaryDirectory() as temporary:
+    database = Path(temporary) / 'expiry.sqlite3'
+    process = start(binary, database, max_sessions=2)
+    try:
+        alice, bob = Client(), Client()
+        for client in (alice, bob):
+            client.request('/session', {})
+            client.request('/feedback', {'id':IDS[0], 'action':'like'})
+        expired_token = next(iter(alice.cookies)).value
+        live_token = next(iter(bob.cookies)).value
+        with sqlite3.connect(database) as connection:
+            connection.execute("UPDATE sessions SET created_at=datetime('now','-30 days') WHERE token=?", (expired_token,))
+            connection.execute("UPDATE sessions SET created_at=datetime('now','-29 days') WHERE token=?", (live_token,))
+            original_created = connection.execute('SELECT created_at FROM sessions WHERE token=?', (live_token,)).fetchone()[0]
+        # Cached preference state cannot bypass the persistent expiration check.
+        for path, body in [('/status',None),('/recommend',None),('/feedback',{'id':IDS[1],'action':'like'})]:
+            try:
+                alice.request(path, body)
+                raise AssertionError('Expired session accepted')
+            except urllib.error.HTTPError as error:
+                assert error.code == 401
+        assert bob.request('/status')['liked_count'] == 1
+        bob.request('/session', {})
+        with sqlite3.connect(database) as connection:
+            assert connection.execute('SELECT created_at FROM sessions WHERE token=?', (live_token,)).fetchone()[0] == original_created
+            connection.execute("CREATE TRIGGER fail_expiry BEFORE DELETE ON preferences BEGIN SELECT RAISE(ABORT,'injected expiry failure'); END")
+        newcomer = Client()
+        try:
+            newcomer.request('/session', {})
+            raise AssertionError('Failed expiration cleanup accepted')
+        except urllib.error.HTTPError as error:
+            assert error.code == 500
+            assert not list(newcomer.cookies)
+        with sqlite3.connect(database) as connection:
+            for table, column in [('sessions','token'),('preferences','session'),('feedback_events','session')]:
+                assert connection.execute(f'SELECT COUNT(*) FROM {table} WHERE {column}=?', (expired_token,)).fetchone()[0] == 1
+            connection.execute('DROP TRIGGER fail_expiry')
+        stop(process); process = start(binary, database, max_sessions=2)
+        try:
+            alice.request('/status')
+            raise AssertionError('Expired session revived on restart')
+        except urllib.error.HTTPError as error:
+            assert error.code == 401
+        # The expired browser receives an empty replacement; the other user is preserved.
+        alice.request('/session', {})
+        assert next(iter(alice.cookies)).value != expired_token
+        assert alice.request('/status')['liked_count'] == 0
+        assert bob.request('/status')['liked_count'] == 1
+        with sqlite3.connect(database) as connection:
+            assert connection.execute('SELECT COUNT(*) FROM sessions').fetchone()[0] == 2
+            for table, column in [('sessions','token'),('preferences','session'),('feedback_events','session')]:
+                assert connection.execute(f'SELECT COUNT(*) FROM {table} WHERE {column}=?', (expired_token,)).fetchone()[0] == 0
+        try:
+            Client().request('/session', {})
+            raise AssertionError('Live session capacity exceeded')
+        except urllib.error.HTTPError as error:
+            assert error.code == 503
+    finally:
+        stop(process)
+    print('Absolute session expiry, cache rejection, rollback, restart, replacement and live-user isolation passed')
