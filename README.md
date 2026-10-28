@@ -68,7 +68,7 @@ HTTP clients use the stable `id` returned by `GET /recommend`: send `{"id":"..."
 
 ## Current boundaries and next milestones
 
-This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery or session expiration cleanup. New-session attempts have a process-wide rate limit; other request routes do not. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, concurrent-load measurements and relevance evaluation remain outstanding.
+This remains a single-instance loopback demo. Anonymous cookies are not authenticated accounts; losing the cookie loses access to that session. There is no account recovery. Sessions expire 30 days after creation; new-session admission cleans up expired data. New-session attempts have a process-wide rate limit; other request routes do not. Do not run multiple server instances against the same database: their derived in-memory caches do not coordinate. Dataset permissions, model provenance, browser E2E, vendored-header review, concurrent-load measurements and relevance evaluation remain outstanding.
 
 CI builds the full native server, runs catalog/preference regressions, and tests independent HTTP sessions, duplicate feedback, concurrent ranking, seen filtering and preference reconstruction across server restarts, including a reordered catalog and stable image/feedback identity. Catalog tests reject invalid schema versions, dimensions, duplicate IDs, path traversal and symlink escapes while preserving the prior loaded version. There is no production deployment or formal verification claim.
 
@@ -104,7 +104,7 @@ Deletion affects only the caller's session, and a copied old cookie remains
 invalid after a server restart. A database failure returns 500 and retains the
 session and its data so the request can be retried. This is logical deletion,
 not a promise of physical erasure from SQLite pages, WAL files or backups.
-Inactive sessions are not automatically purged; database byte quotas and
+Expired sessions are purged during new-session admission; database byte quotas and
 rate limits on non-creation routes remain future work. Requests already in flight
 may have read the previous session state before revocation commits.
 
@@ -117,17 +117,17 @@ accepted range **1–1000000**). Configure it before starting the native server:
 MEME_MAX_SESSIONS=2000 ./build/backend/cpp/recommender backend/data/catalog.json data/users.sqlite3 frontend
 ```
 
-The count check and creation happen in one SQLite write statement. At capacity,
+Expired-session cleanup, the count check and creation share one SQLite transaction. At capacity,
 `POST /session` returns **503** with a JSON error and no new cookie. Existing
 sessions continue to work, including repeated `POST /session` calls with a valid
 cookie. Deleting a session frees one slot. The count survives process restarts;
-lowering the limit below the current count preserves all existing data and
+lowering the limit below the current count preserves live session data and
 blocks new sessions until the count falls below the limit. Invalid configuration
 fails startup before opening the user database.
 
 This is an admission limit, not a measured serving-capacity recommendation or a
-rate limiter. It does not cap database bytes or request rates. Session expiration
-and per-client abuse controls remain unimplemented.
+rate limiter. It does not cap database bytes or request rates. Per-client abuse
+controls remain unimplemented; absolute session expiration is described below.
 
 ### Bounded transition history
 
@@ -164,7 +164,7 @@ server restart and is not shared between processes. This protects the local
 demo's creation path, not every route or a public production service. A client
 can consume the shared quota and delay other new visitors; existing sessions
 continue working. The default is an explicit policy, not a measured capacity.
-Session expiry, other request limits and database byte quotas remain future work.
+Other request limits and database byte quotas remain future work.
 
 
 ### Revocation during a request
@@ -181,3 +181,28 @@ The regression orders authentication, revocation and handler-state access
 explicitly against SQLite and checks the production exception classifier. HTTP
 smoke tests cover normal revoked cookies; no probabilistic timing test or browser
 E2E is claimed for this race.
+
+
+### Absolute session expiration
+
+Sessions expire **30 days after creation**, matching the cookie's `Max-Age`.
+Server-side checks enforce the limit even with a manually replayed cookie or
+cached preferences. Activity and repeated `POST /session` calls do not extend
+the lifetime. An expired session receives 401 on protected routes; posting to
+`/session` creates a new, empty session subject to admission limits.
+
+When a new session is admitted, one SQLite transaction removes expired tokens,
+preferences and feedback events before checking stored-session capacity and
+inserting the new session. A failure rolls back cleanup and creation together;
+no replacement cookie is issued. The transaction captures a single expiration
+cutoff, preserving foreign-key consistency at the boundary. Live users retain
+all durable preferences. Cleanup is lazy: expiration is enforced on access, but
+expired rows remain on disk until successful new-session admission. This is
+logical deletion, not secure erasure or a database byte quota.
+
+Existing rows use their stored `created_at` timestamp, so sessions already
+30 days old expire immediately after upgrading. Back up the database before
+adopting this retention policy. Server wall-clock accuracy is required; invalid
+creation timestamps fail authentication but are not silently deleted. Tests age
+isolated SQLite fixtures, cover rollback/restart/cache behavior, and do not
+claim elapsed-30-day runtime or browser verification.

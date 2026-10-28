@@ -45,12 +45,39 @@ void UserStore::clear_cached_preferences() {
 }
 std::string UserStore::create_session() {
     std::lock_guard<std::mutex> guard(mutex_);
-    // Count and insert share a single SQLite write statement, including when
-    // another connection uses this database. Existing sessions are never evicted.
-    Statement insert(db_, "INSERT INTO sessions(token) SELECT lower(hex(randomblob(32))) WHERE (SELECT COUNT(*) FROM sessions) < CAST(? AS INTEGER) RETURNING token");
-    insert.bind(1, std::to_string(max_sessions_));
-    if (!insert.row()) throw SessionCapacityReached();
-    return insert.text(0);
+    // Expiration cleanup and admission commit together. Capture one cutoff so
+    // a session crossing the boundary cannot leave orphaned child rows.
+    execute("BEGIN IMMEDIATE");
+    try {
+        std::string cutoff;
+        {
+            Statement clock(db_, "SELECT datetime('now','-30 days')");
+            clock.row();
+            cutoff = clock.text(0);
+        }
+        for (const char* sql : {
+                "DELETE FROM feedback_events WHERE session IN (SELECT token FROM sessions WHERE julianday(created_at)<=julianday(?))",
+                "DELETE FROM preferences WHERE session IN (SELECT token FROM sessions WHERE julianday(created_at)<=julianday(?))",
+                "DELETE FROM sessions WHERE julianday(created_at)<=julianday(?)"}) {
+            Statement prune(db_, sql);
+            prune.bind(1, cutoff);
+            prune.row();
+        }
+        const bool pruned = sqlite3_changes(db_) > 0;
+        std::string token;
+        {
+            Statement insert(db_, "INSERT INTO sessions(token) SELECT lower(hex(randomblob(32))) WHERE (SELECT COUNT(*) FROM sessions) < CAST(? AS INTEGER) RETURNING token");
+            insert.bind(1, std::to_string(max_sessions_));
+            if (!insert.row()) throw SessionCapacityReached();
+            token = insert.text(0);
+        }
+        execute("COMMIT");
+        if (pruned) states_.clear(); // Derived preferences only; durable live users remain.
+        return token;
+    } catch (...) {
+        sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
+        throw;
+    }
 }
 void UserStore::delete_session(const std::string& session) {
     std::lock_guard<std::mutex> guard(mutex_);
@@ -73,7 +100,7 @@ void UserStore::delete_session(const std::string& session) {
     states_.erase(session);
 }
 UserStore::State& UserStore::load(const std::string& session) {
-    Statement exists(db_, "SELECT 1 FROM sessions WHERE token=?"); exists.bind(1,session);
+    Statement exists(db_, "SELECT 1 FROM sessions WHERE token=? AND julianday(created_at)>julianday('now','-30 days')"); exists.bind(1,session);
     if (session.size() != 64 || !exists.row()) throw UnknownSession();
     auto found = states_.find(session);
     if (found != states_.end()) return found->second;
