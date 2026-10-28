@@ -105,7 +105,7 @@ invalid after a server restart. A database failure returns 500 and retains the
 session and its data so the request can be retried. This is logical deletion,
 not a promise of physical erasure from SQLite pages, WAL files or backups.
 Expired sessions are purged during new-session admission; database byte quotas and
-rate limits on non-creation routes remain future work. Requests already in flight
+per-client rate limits remain future work. Requests already in flight
 may have read the previous session state before revocation commits.
 
 ### Session capacity
@@ -206,3 +206,19 @@ adopting this retention policy. Server wall-clock accuracy is required; invalid
 creation timestamps fail authentication but are not silently deleted. Tests age
 isolated SQLite fixtures, cover rollback/restart/cache behavior, and do not
 claim elapsed-30-day runtime or browser verification.
+
+### Recommendation admission
+
+`MEME_RECOMMENDATIONS_PER_MINUTE` caps admitted ranking attempts in a rolling
+60-second window (default 600, integer range 1–60000). This independent,
+process-wide quota applies after session validation and before catalog ranking.
+Exhaustion returns 429 with a whole-second `Retry-After` and `Cache-Control: no-store`.
+Unauthenticated requests still return 401 and do not consume ranking slots.
+Feedback, status, image reads and session deletion do not consume this quota.
+
+The bounded in-memory window uses a monotonic clock and synchronizes concurrent
+admissions. Restart resets it; creating/deleting a session does not. Failed
+admitted attempts consume a slot. One busy user can exhaust the shared quota;
+this is a demo overload policy, not per-user fairness or measured capacity.
+It does not bound authentication/storage work, concurrent connections or image
+traffic. Multi-instance and public deployment abuse controls remain outstanding.

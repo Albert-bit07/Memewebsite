@@ -5,11 +5,11 @@
 #include <stdexcept>
 
 // One process-wide rolling window, with no attacker-controlled identity map.
-class SessionAdmission {
+class RequestAdmission {
 public:
     using Clock = std::chrono::steady_clock;
-    explicit SessionAdmission(std::size_t limit) : limit_(limit) {
-        if (limit == 0 || limit > 60000) throw std::invalid_argument("Invalid session creation rate");
+    explicit RequestAdmission(std::size_t limit) : limit_(limit) {
+        if (limit == 0 || limit > 60000) throw std::invalid_argument("Invalid request rate");
     }
     // Zero admits the attempt; otherwise return whole seconds until a slot opens.
     int retry_after() {

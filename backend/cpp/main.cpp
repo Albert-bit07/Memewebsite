@@ -3,7 +3,7 @@
 #include "recommender.hpp"
 #include "user_store.hpp"
 #include "request_failure.hpp"
-#include "session_admission.hpp"
+#include "request_admission.hpp"
 #include <algorithm>
 #include <charconv>
 #include <fstream>
@@ -65,7 +65,16 @@ int main(int argc, char** argv) {
                 throw std::runtime_error("MEME_SESSION_CREATIONS_PER_MINUTE must be an integer from 1 to 60000");
             }
         }
-        SessionAdmission admission(creations_per_minute);
+        RequestAdmission admission(creations_per_minute);
+        std::size_t recommendations_per_minute = 600;
+        if (const char* setting = std::getenv("MEME_RECOMMENDATIONS_PER_MINUTE")) {
+            const std::string value(setting);
+            const auto parsed = std::from_chars(value.data(), value.data()+value.size(), recommendations_per_minute);
+            if (parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size() || recommendations_per_minute == 0 || recommendations_per_minute > 60000) {
+                throw std::runtime_error("MEME_RECOMMENDATIONS_PER_MINUTE must be an integer from 1 to 60000");
+            }
+        }
+        RequestAdmission ranking_admission(recommendations_per_minute);
         Recommender catalog;
         catalog.load_catalog(manifest);
         auto item_indices = item_lookup(catalog);
@@ -143,6 +152,12 @@ int main(int argc, char** argv) {
             std::shared_lock<std::shared_mutex> generation(catalog_mutex);
             const auto token=session_token(req);
             const auto state=users.snapshot(token);
+            const int retry_after = ranking_admission.retry_after();
+            if (retry_after > 0) {
+                res.status=429;
+                res.set_header("Retry-After",std::to_string(retry_after));
+                respond(res,{{"error","Recommendation rate exceeded; retry later"}}); return;
+            }
             auto ranked=catalog.recommend(state.preference,state.liked.empty() ? static_cast<int>(catalog.get_ids().size()) : 20,state.seen);
             if (state.liked.empty()) {
                 std::sort(ranked.begin(),ranked.end(),[&](int a,int b) {
