@@ -295,3 +295,22 @@ The test owns port 18080 and refuses to reuse a running server. It cleans up its
 server process and temporary database. Other browsers, mobile devices and a
 deployed service are outside this suite's coverage. Browser installation needs
 access to Playwright's download service; a download failure is not a test pass.
+
+
+### Why an item appears
+
+Each recommendation includes a stable `reason` code, displayed as a short caption:
+
+- `session_discovery`: with no likes, unseen items use a deterministic ordering
+  derived from the session and item IDs. This is neither popularity ranking nor
+  a prediction of relevance.
+- `liked_similarity`: unseen items rank by cosine similarity to the normalized
+  sum of liked embeddings. Ties use catalog order, including when liked vectors
+  cancel to a zero preference. The caption describes this ranking rule; it does
+  not assert that every candidate is similar or assign a confidence score.
+
+Reasons describe the preference snapshot at retrieval. Liking a visible item
+changes future requests, not the reason that item originally appeared. Removing
+all likes returns subsequent requests to discovery. Unknown reason codes are
+not rendered. Per-item feature attribution, diversity reranking and deliberate
+exploration within personalized results remain future work requiring evaluation.

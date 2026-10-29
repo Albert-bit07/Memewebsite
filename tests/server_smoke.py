@@ -65,6 +65,7 @@ with tempfile.TemporaryDirectory() as temporary:
         status = alice.request('/status')
         assert status['catalog_version'] == 'legacy-20261020'
         assert status['embeddings_loaded'] == status['paths_loaded'] > 20
+        assert {row['reason'] for row in alice.request('/recommend')['recommendations']} == {'session_discovery'}
         assert alice.request('/feedback', {'id':IDS[0],'action':'like'})['liked_count'] == 1
         assert alice.request('/feedback', {'id':IDS[0],'action':'like'})['liked_count'] == 1
         assert bob.request('/status')['liked_count'] == 0
@@ -75,6 +76,7 @@ with tempfile.TemporaryDirectory() as temporary:
         a = alice.request('/recommend')['recommendations']
         b = bob.request('/recommend')['recommendations']
         assert len(a) == len(b) == 20
+        assert {row['reason'] for row in a + b} == {'liked_similarity'}
         assert not {0,2}.intersection(row['index'] for row in a)
         assert 1 not in [row['index'] for row in b]
         assert a != b
@@ -107,6 +109,7 @@ with tempfile.TemporaryDirectory() as temporary:
         assert alice.request('/feedback', {'id':IDS[0],'action':'unlike'})['liked_count'] == 0
         assert alice.request('/feedback', {'id':IDS[0],'action':'unlike'})['liked_count'] == 0
         assert bob.request('/status')['liked_count'] == 1
+        assert {row['reason'] for row in alice.request('/recommend')['recommendations']} == {'session_discovery'}
         stop(process); process = start(binary, database)
         assert alice.request('/status')['liked_count'] == 0
         assert bob.request('/status')['liked_count'] == 1

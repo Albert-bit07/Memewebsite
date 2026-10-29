@@ -11,7 +11,7 @@ function element() {
 }
 const elements = new Map();
 const requests = [];
-const item = {id: 'folder/a + b?.jpg', index: 7};
+const item = {id: 'folder/a + b?.jpg', index: 7, reason: 'session_discovery'};
 let observe;
 const context = vm.createContext({
     console,
@@ -43,7 +43,8 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/script.js'), '
     // Drain initialization's asynchronous fetch/json continuations.
     await new Promise(resolve => setImmediate(resolve));
     const card = elements.get('feedContainer').children[0];
-    const [image, button] = card.children;
+    const [image, button, reason] = card.children;
+    assert.equal(reason.textContent, 'Explore the catalog · ordered for this session');
     assert.equal(image.src, '/image?id=' + encodeURIComponent(item.id));
     assert.equal(card.dataset.id, item.id);
     await button.onclick({stopPropagation() {}});
@@ -56,7 +57,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/script.js'), '
     ]);
     let release;
     let recommendationCalls = 0;
-    const fresh = {id:'fresh.jpg',index:8};
+    const fresh = {id:'fresh.jpg',index:8,reason:'liked_similarity'};
     context.fetch = async url => {
         assert.equal(url,'/recommend');
         recommendationCalls++;
@@ -72,5 +73,8 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/script.js'), '
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(recommendationCalls,2,'Refresh requested during a load was lost');
     assert.deepEqual(elements.get('feedContainer').children.map(card=>card.dataset.id),[fresh.id]);
+    assert.equal(elements.get('feedContainer').children[0].children[2].textContent, 'Ranked by similarity to your likes');
+    vm.runInContext("appendCard({id:'unknown',reason:'<img src=x onerror=alert(1)>'})",context);
+    assert.equal(elements.get('feedContainer').children[1].children.length,2);
     console.log('Frontend stable-ID image, like, unlike and visibility contracts passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

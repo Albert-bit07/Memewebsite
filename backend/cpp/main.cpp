@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
             json items=json::array();
             for (int index:ranked) {
                 if (state.seen.count(index)) continue;
-                items.push_back({{"index",index},{"id",catalog.get_ids()[index]},{"path",std::filesystem::path(catalog.get_paths()[index]).filename().string()}});
+                items.push_back({{"reason",state.liked.empty() ? "session_discovery" : "liked_similarity"},{"index",index},{"id",catalog.get_ids()[index]},{"path",std::filesystem::path(catalog.get_paths()[index]).filename().string()}});
                 if (items.size()==20) break;
             }
             respond(res,{{"recommendations",items},{"catalog_version",catalog.version()}});
