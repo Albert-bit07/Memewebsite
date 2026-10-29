@@ -12,6 +12,10 @@ dependencies = [
 
 [tool.uv]
 package = false
+require-build-hashes = true
+build-constraint-dependencies = [
+    { requirement = "setuptools==84.2.1", hashes = ["sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2"] },
+]
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 
 [tool.uv.sources]

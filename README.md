@@ -62,14 +62,25 @@ OpenAI CLIP is pinned to source commit
 `d05afc436d78f1c48dc0dbf8e5980a9d471f35f6`. Torch and torchvision come only
 from the explicit PyTorch CPU index. The environment installs about 200 MiB of
 torch alone. It does not include pretrained weights; the first real generation
-downloads ViT-B/32 through CLIP's checksum-validating loader. Build tooling for
-the Git source is not fully locked, so this is not a bit-reproducible build.
+downloads ViT-B/32 through CLIP's checksum-validating loader. CLIP's isolated
+build uses setuptools 84.2.1 with a pinned wheel SHA-256; uv requires hashes for
+all build dependencies. CI installs without a cache to exercise that build
+instead of reusing a previously built wheel. This does not establish a
+bit-reproducible wheel: OS, interpreter patch versions and archive timestamps
+are not fixed. uv's build-hash enforcement is experimental in the pinned
+uv 0.13.4; its warning remains visible.
 GPU, macOS, Windows and other Python versions are outside this environment's
 declared scope. Native serving and its existing CI job remain independent.
 
 To update dependencies deliberately, run `uv lock --upgrade --project backend/python`,
 review the lock diff, then repeat installation, dependency checks and the smoke
 test above. Update the CLIP revision explicitly in `pyproject.toml` when needed.
+Build-tool updates also require updating the exact version and wheel hash in
+`build-constraint-dependencies`, then running `uv lock --project backend/python`.
+Use a fresh environment with `uv sync --no-cache --locked --project backend/python`
+to verify those changes; already-installed packages and cached built wheels
+are not rechecked. Missing or incorrect build hashes fail closed. See
+[uv's build dependency hash documentation](https://docs.astral.sh/uv/concepts/projects/build/#project-build-dependency-hashes).
 CI uses `--locked` so a stale lock fails rather than silently resolving changes.
 The separate embedding job loads a tiny randomly initialized TorchScript model,
 decodes generated grayscale/RGBA images with Pillow, runs real torchvision/CLIP
