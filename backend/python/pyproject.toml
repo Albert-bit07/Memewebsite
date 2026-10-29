@@ -1,0 +1,25 @@
+[project]
+name = "meme-offline-embeddings"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "clip",
+    "numpy",
+    "pillow",
+    "torch>=2.6",
+    "torchvision",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+clip = { git = "https://github.com/openai/CLIP.git", rev = "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6" }
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
