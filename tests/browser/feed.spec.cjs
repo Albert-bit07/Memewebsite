@@ -63,6 +63,7 @@ test('independent browser sessions, like/unlike and restart persistence', async 
     await Promise.all([a.goto(base), b.goto(base)]);
     const button = a.locator('.like-button').first();
     await expect(button).toBeVisible();
+    await expect(a.locator('.recommendation-reason').first()).toHaveText('Explore the catalog · ordered for this session');
     await expect(b.locator('.meme-card').first()).toBeVisible();
     await expect.poll(() => a.locator('.meme-card img').first().evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
     await button.click();
@@ -85,6 +86,8 @@ test('independent browser sessions, like/unlike and restart persistence', async 
     await expect(b.locator('#likedCount')).toHaveText('0');
     expect((await (await alice.request.get(base + '/status')).json()).liked_ids).toEqual(liked);
     await expect(a.locator('.meme-card').first()).toBeVisible();
+    await expect(a.locator('.recommendation-reason').first()).toHaveText('Ranked by similarity to your likes');
+    await expect(b.locator('.recommendation-reason').first()).toHaveText('Explore the catalog · ordered for this session');
     expect(errors).toEqual([]);
   } finally {
     await alice.close();

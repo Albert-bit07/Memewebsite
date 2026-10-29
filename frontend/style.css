@@ -199,3 +199,16 @@ body {
     0%, 100% { transform: translate(-50%, 0); }
     50% { transform: translate(-50%, 10px); }
 }
+
+.recommendation-reason {
+    position: absolute;
+    left: 20px;
+    bottom: 90px;
+    max-width: calc(100% - 120px);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 14px;
+    pointer-events: none;
+}

@@ -73,6 +73,16 @@ function appendCard(meme) {
         finally { button.disabled = false; }
     };
     card.append(image, button);
+    const explanations = {
+        session_discovery: 'Explore the catalog · ordered for this session',
+        liked_similarity: 'Ranked by similarity to your likes',
+    };
+    if (Object.hasOwn(explanations, meme.reason)) {
+        const reason = document.createElement('p');
+        reason.className = 'recommendation-reason';
+        reason.textContent = explanations[meme.reason];
+        card.append(reason);
+    }
     document.getElementById('feedContainer').append(card);
     card.dataset.id = meme.id;
     observer.observe(card);
