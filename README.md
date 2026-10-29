@@ -222,3 +222,17 @@ admitted attempts consume a slot. One busy user can exhaust the shared quota;
 this is a demo overload policy, not per-user fairness or measured capacity.
 It does not bound authentication/storage work, concurrent connections or image
 traffic. Multi-instance and public deployment abuse controls remain outstanding.
+
+### Offline embedding resource cleanup
+
+The Python helper closes the source image and converted RGB buffer after
+preprocessing, including conversion/preprocessing failures. Model preparation
+publishes its model, preprocessor and device only after loading and evaluation
+mode succeed; a failed reload leaves the previous state intact. This helper is
+for sequential offline generation, not concurrent model replacement.
+
+The resource tests use controlled dependency stubs, so they run without torch,
+CLIP, Pillow, model weights or GPU access. They do not establish actual CLIP
+compatibility, output quality or memory benchmarks. The optional embedding
+runtime still needs a declared, verified dependency environment; native C++
+recommendation serving does not load that runtime.
