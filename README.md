@@ -273,3 +273,25 @@ CLIP, Pillow, model weights or GPU access. They do not establish actual CLIP
 compatibility, output quality or memory benchmarks. The separate locked CPU
 smoke test above checks actual dependency integration with random weights;
 native C++ recommendation serving does not load that runtime.
+
+### Native server browser checks
+
+The Playwright suite opens two independent Chromium contexts against the real
+C++ server and a temporary SQLite database. It checks image decoding, like and
+unlike buttons, independent preferences, persistence across a server restart,
+and recovery through the refresh button after an aborted recommendation request.
+It uses the checked-in catalog; this is UI integration coverage, not a relevance
+evaluation. CI runs it after the native HTTP tests on Linux.
+
+After building the server, run from the repository root:
+
+```bash
+npm ci --prefix tests/browser
+npx --prefix tests/browser playwright install --with-deps chromium
+MEME_SERVER_BINARY="$PWD/build/backend/cpp/recommender" npm test --prefix tests/browser
+```
+
+The test owns port 18080 and refuses to reuse a running server. It cleans up its
+server process and temporary database. Other browsers, mobile devices and a
+deployed service are outside this suite's coverage. Browser installation needs
+access to Playwright's download service; a download failure is not a test pass.
