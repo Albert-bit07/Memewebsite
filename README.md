@@ -43,14 +43,40 @@ Open `http://127.0.0.1:18080` in a browser; the C++ server serves the frontend f
 
 A schema-v1 manifest contains `catalog_version`, `model_version`, `dimension`, a relative CSV `vectors` path, and ordered `items` with unique stable IDs and relative image paths. Item order corresponds to vector rows. The generator derives IDs from the relative image filename; preserving filenames preserves identity across generations, while renaming changes identity. IDs are not vector indexes. Artifact paths are resolved before containment validation: symlinks within the artifact are supported, but links outside it are rejected. Keep the artifact directory read-only while serving; validation does not protect against a local process changing files afterward.
 
-For a new image collection, install the offline pipeline's PyTorch, OpenAI CLIP, Pillow and NumPy dependencies in a separate environment, then run:
+For a new image collection, use the separate locked CPU environment on Linux
+x86_64 with Python 3.12 and Git installed. From the repository root:
 
 ```bash
-python backend/python/embed_memes.py /tmp/meme-catalog-v2 --version v2 --images /path/to/permitted/images
+python -m pip install uv==0.13.4
+uv sync --locked --project backend/python
+uv pip check --python backend/python/.venv/bin/python
+uv run --locked --project backend/python python tests/embedding_smoke.py
+uv run --locked --project backend/python python backend/python/embed_memes.py /tmp/meme-catalog-v2 --version v2 --images /path/to/permitted/images
 build-native/backend/cpp/recommender /tmp/meme-catalog-v2/catalog.json
 ```
 
 The output directory must not exist. Files are assembled in a temporary sibling directory and renamed only after successful generation. An error removes that temporary artifact. CLIP regeneration has not been executed in the current validation; the artifact writer is tested with synthetic vectors.
+
+`backend/python/uv.lock` pins runtime packages and registry artifact hashes;
+OpenAI CLIP is pinned to source commit
+`d05afc436d78f1c48dc0dbf8e5980a9d471f35f6`. Torch and torchvision come only
+from the explicit PyTorch CPU index. The environment installs about 200 MiB of
+torch alone. It does not include pretrained weights; the first real generation
+downloads ViT-B/32 through CLIP's checksum-validating loader. Build tooling for
+the Git source is not fully locked, so this is not a bit-reproducible build.
+GPU, macOS, Windows and other Python versions are outside this environment's
+declared scope. Native serving and its existing CI job remain independent.
+
+To update dependencies deliberately, run `uv lock --upgrade --project backend/python`,
+review the lock diff, then repeat installation, dependency checks and the smoke
+test above. Update the CLIP revision explicitly in `pyproject.toml` when needed.
+CI uses `--locked` so a stale lock fails rather than silently resolving changes.
+The separate embedding job loads a tiny randomly initialized TorchScript model,
+decodes generated grayscale/RGBA images with Pillow, runs real torchvision/CLIP
+CPU inference, checks finite unit vectors and writes a catalog. No pretrained
+weights, real image collection, semantic accuracy or throughput are tested.
+Upstream CLIP's plain-state-dict loading fallback failed in this environment;
+the smoke exercises the TorchScript format used by official pretrained files.
 
 ## Preference and concurrency behavior
 
@@ -233,6 +259,6 @@ for sequential offline generation, not concurrent model replacement.
 
 The resource tests use controlled dependency stubs, so they run without torch,
 CLIP, Pillow, model weights or GPU access. They do not establish actual CLIP
-compatibility, output quality or memory benchmarks. The optional embedding
-runtime still needs a declared, verified dependency environment; native C++
-recommendation serving does not load that runtime.
+compatibility, output quality or memory benchmarks. The separate locked CPU
+smoke test above checks actual dependency integration with random weights;
+native C++ recommendation serving does not load that runtime.
