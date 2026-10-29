@@ -24,13 +24,14 @@ _preprocess=None
 _device=None
 
 def init_model(device=None):
-    """Initialize CLIP model in Python process. Call from C++ once at startup."""
+    """Initialize the offline model; keep existing state if preparation fails."""
     global _model, _preprocess, _device
     if clip is None:
         raise RuntimeError('clip or torch not installed. pip install torch torchvision git+https://github.com/openai/CLIP.git')
-    _device=device or ("cuda" if torch.cuda.is_available()else"cpu")
-    _model,_preprocess = clip.load("ViT-B/32",device=_device)
-    _model.eval()
+    candidate_device=device or ("cuda" if torch.cuda.is_available()else"cpu")
+    candidate_model,candidate_preprocess = clip.load("ViT-B/32",device=candidate_device)
+    candidate_model.eval()
+    _model,_preprocess,_device = candidate_model,candidate_preprocess,candidate_device
     return True
 
 def embed_image(path):
@@ -38,8 +39,11 @@ def embed_image(path):
     global _model, _preprocess, _device
     if _model is None:
         init_model()
-    image = Image.open(path).convert('RGB')
-    image = _preprocess(image).unsqueeze(0).to(_device)
+    # Close both the source file and converted pixel buffer even when decoding
+    # or preprocessing fails. Inference needs only the resulting tensor.
+    with Image.open(path) as source:
+        with source.convert('RGB') as rgb:
+            image = _preprocess(rgb).unsqueeze(0).to(_device)
     with torch.no_grad():
         emb=_model.encode_image(image)
         emb= emb/ emb.norm(dim=-1, keepdim=True)
