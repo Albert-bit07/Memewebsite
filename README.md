@@ -314,3 +314,13 @@ changes future requests, not the reason that item originally appeared. Removing
 all likes returns subsequent requests to discovery. Unknown reason codes are
 not rendered. Per-item feature attribution, diversity reranking and deliberate
 exploration within personalized results remain future work requiring evaluation.
+
+### Relevance evaluation
+
+The [offline evaluation protocol](docs/relevance-evaluation.md) defines held-out
+judgments, frozen catalog/exclusion boundaries and reproducible random/popularity
+comparisons. Run `python3 benchmarks/relevance.py dataset.json predictions.json`
+to report Precision/Recall/nDCG/MRR at k with fixed query denominators and input
+hashes. Missing rankings receive zero credit. Synthetic tests verify the harness;
+representative permitted data and human judgments are still required to evaluate
+recommendation quality.
