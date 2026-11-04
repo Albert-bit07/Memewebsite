@@ -6,6 +6,7 @@
 #include "utils.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 
@@ -56,6 +57,52 @@ std::vector<int> Recommender::recommend(const std::vector<float> &user_vec, int 
     for (int i =0; i<std::min(top_k, (int)scores.size()); ++i) top.push_back(scores[i].second);
     return top;
 }
+std::vector<int> Recommender::recommend_balanced(const std::vector<float>& user_vec, int top_k,
+        const std::unordered_set<int>& excluded, const std::string& seed) const {
+    if (top_k < 0 || top_k > 20) throw std::invalid_argument("Balanced ranking requires k in [0,20]");
+    const auto candidates = recommend(user_vec, 100, excluded);
+    const auto count = std::min(static_cast<std::size_t>(top_k), candidates.size());
+    std::vector<int> selected;
+    if (count == 0) return selected;
+    std::vector<float> relevance, redundancy(candidates.size(), 0.0f);
+    for (int index : candidates) relevance.push_back(cosine_similarity(user_vec, embeddings[index]));
+    std::unordered_set<int> used;
+    // Reserve one discovery slot when a feed has at least two eligible items.
+    const auto ranked_count = count > 1 ? count - 1 : count;
+    for (std::size_t slot = 0; slot < ranked_count; ++slot) {
+        std::size_t best = candidates.size();
+        float best_score = 0;
+        for (std::size_t j = 0; j < candidates.size(); ++j) {
+            if (used.count(candidates[j])) continue;
+            const float score = 0.75f * relevance[j] - 0.25f * redundancy[j];
+            if (best == candidates.size() || score > best_score) { best = j; best_score = score; }
+        }
+        const int index = candidates[best];
+        selected.push_back(index);
+        used.insert(index);
+        for (std::size_t j = 0; j < candidates.size(); ++j) {
+            redundancy[j] = std::max(redundancy[j], cosine_similarity(embeddings[index], embeddings[candidates[j]]));
+        }
+    }
+    if (count > 1) {
+        auto stable_key = [&](int index) {
+            const auto& identity = ids.empty() ? paths[index] : ids[index];
+            std::uint64_t hash = 14695981039346656037ULL;
+            for (unsigned char byte : seed + std::string(1, '\0') + identity) { hash ^= byte; hash *= 1099511628211ULL; }
+            return hash;
+        };
+        int discovery = -1;
+        std::uint64_t best_hash = 0;
+        for (int index = 0; index < static_cast<int>(embeddings.size()); ++index) {
+            if (excluded.count(index) || used.count(index)) continue;
+            const auto hash = stable_key(index);
+            if (discovery == -1 || hash < best_hash) { discovery = index; best_hash = hash; }
+        }
+        selected.push_back(discovery);
+    }
+    return selected;
+}
+
 const std::vector<std::string>& Recommender::get_paths() const{return paths;}
 const std::vector<std::vector<float>>&  Recommender::get_embeddings() const{return embeddings; }
 

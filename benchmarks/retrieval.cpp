@@ -53,32 +53,35 @@ int main(int argc, char** argv) {
             std::cout.rdbuf(output);
             std::unordered_set<int> excluded;
             for(int i=0;i<count;i+=10) excluded.insert(i);
-            std::vector<double> measurements[2];
+            std::vector<double> measurements[3];
             for(int trial=0;trial<21;trial++) {
                 std::vector<float> query(64);
                 for(auto& value:query) value=random(generator);
-                std::vector<int> results[2];
+                std::vector<int> results[3];
                 // Alternate ordering to avoid giving one method all warm-cache runs.
-                for(int step=0;step<2;step++) {
-                    const int method=(trial+step)%2;
+                for(int step=0;step<3;step++) {
+                    const int method=(trial+step)%3;
                     auto start=Clock::now();
-                    results[method]=method ? catalog.recommend(query,20,excluded) : full_sort(catalog,query,20,excluded);
+                    results[method]=method == 2 ? catalog.recommend_balanced(query,20,excluded,"benchmark-session") :
+                        method == 1 ? catalog.recommend(query,20,excluded) : full_sort(catalog,query,20,excluded);
                     auto elapsed=std::chrono::duration<double,std::milli>(Clock::now()-start).count();
                     if(trial) {
                         measurements[method].push_back(elapsed);
-                        if(samples.is_open()) samples << count << ',' << trial << ',' << (method ? "partial_sort" : "full_sort") << ',' << elapsed << '\n';
+                        if(samples.is_open()) samples << count << ',' << trial << ',' << (method == 2 ? "balanced" : method ? "partial_sort" : "full_sort") << ',' << elapsed << '\n';
                     }
                 }
+                if (results[2].size() != 20 || std::unordered_set<int>(results[2].begin(),results[2].end()).size() != 20 ||
+                    std::any_of(results[2].begin(),results[2].end(),[&](int index){return excluded.count(index);})) throw std::runtime_error("Balanced ranking contract mismatch");
                 if(results[0]!=results[1]) throw std::runtime_error("Exact ranking mismatch");
             }
             long peak=-1;
 #ifdef __linux__
             rusage usage{}; getrusage(RUSAGE_SELF,&usage); peak=usage.ru_maxrss;
 #endif
-            for(int method=0;method<2;method++) {
+            for(int method=0;method<3;method++) {
                 auto times=measurements[method]; double total=0;for(double value:times)total+=value;
                 std::sort(times.begin(),times.end());
-                std::cout<<count<<','<<(method?"partial_sort":"full_sort")<<','<<(times[9]+times[10])/2<<','<<times[18]<<','<<total<<','<<20000/total<<','<<peak<<'\n';
+                std::cout<<count<<','<<(method == 2 ? "balanced" : method ? "partial_sort" : "full_sort")<<','<<(times[9]+times[10])/2<<','<<times[18]<<','<<total<<','<<20000/total<<','<<peak<<'\n';
             }
         }
         std::filesystem::remove_all(root);

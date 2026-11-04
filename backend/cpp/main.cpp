@@ -152,13 +152,19 @@ int main(int argc, char** argv) {
             std::shared_lock<std::shared_mutex> generation(catalog_mutex);
             const auto token=session_token(req);
             const auto state=users.snapshot(token);
+            const auto strategy = req.has_param("strategy") ? req.get_param_value("strategy") : "exact";
+            if (req.get_param_value_count("strategy") > 1 || (strategy != "exact" && strategy != "balanced")) {
+                res.status=400; respond(res,{{"error","Unknown or repeated ranking strategy"}}); return;
+            }
+            const bool balanced = strategy == "balanced" && !state.liked.empty();
             const int retry_after = ranking_admission.retry_after();
             if (retry_after > 0) {
                 res.status=429;
                 res.set_header("Retry-After",std::to_string(retry_after));
                 respond(res,{{"error","Recommendation rate exceeded; retry later"}}); return;
             }
-            auto ranked=catalog.recommend(state.preference,state.liked.empty() ? static_cast<int>(catalog.get_ids().size()) : 20,state.seen);
+            auto ranked=balanced ? catalog.recommend_balanced(state.preference,20,state.seen,token) :
+                catalog.recommend(state.preference,state.liked.empty() ? static_cast<int>(catalog.get_ids().size()) : 20,state.seen);
             if (state.liked.empty()) {
                 std::sort(ranked.begin(),ranked.end(),[&](int a,int b) {
                     const auto x=order_key(token+catalog.get_ids()[a]), y=order_key(token+catalog.get_ids()[b]);
@@ -168,7 +174,9 @@ int main(int argc, char** argv) {
             json items=json::array();
             for (int index:ranked) {
                 if (state.seen.count(index)) continue;
-                items.push_back({{"reason",state.liked.empty() ? "session_discovery" : "liked_similarity"},{"index",index},{"id",catalog.get_ids()[index]},{"path",std::filesystem::path(catalog.get_paths()[index]).filename().string()}});
+                const char* reason = state.liked.empty() ? "session_discovery" : "liked_similarity";
+                if (balanced) reason = ranked.size() > 1 && index == ranked.back() ? "exploration" : "diversity_ranking";
+                items.push_back({{"reason",reason},{"index",index},{"id",catalog.get_ids()[index]},{"path",std::filesystem::path(catalog.get_paths()[index]).filename().string()}});
                 if (items.size()==20) break;
             }
             respond(res,{{"recommendations",items},{"catalog_version",catalog.version()}});

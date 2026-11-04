@@ -29,7 +29,8 @@ async function loadMoreMemes() {
     isLoadingMore = true;
     document.getElementById('loading').style.display = 'block';
     try {
-        const data = await api('/recommend');
+        const balanced = document.getElementById('rankingStrategy').value === 'balanced';
+        const data = await api(balanced ? '/recommend?strategy=balanced' : '/recommend');
         exhausted = data.recommendations.length === 0;
         for (const meme of data.recommendations) {
             if (!memeQueue.some(existing => existing.id === meme.id)) {
@@ -76,6 +77,8 @@ function appendCard(meme) {
     const explanations = {
         session_discovery: 'Explore the catalog · ordered for this session',
         liked_similarity: 'Ranked by similarity to your likes',
+        diversity_ranking: 'Similarity with a variety adjustment',
+        exploration: 'Explore another unseen item',
     };
     if (Object.hasOwn(explanations, meme.reason)) {
         const reason = document.createElement('p');

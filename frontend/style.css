@@ -212,3 +212,20 @@ body {
     font-size: 14px;
     pointer-events: none;
 }
+
+.ranking-control {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    z-index: 100;
+    padding: 8px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.8);
+}
+.ranking-control select {
+    padding: 6px;
+    color: white;
+    background: #222;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+}

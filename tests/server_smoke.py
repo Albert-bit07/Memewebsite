@@ -80,6 +80,17 @@ with tempfile.TemporaryDirectory() as temporary:
         assert not {0,2}.intersection(row['index'] for row in a)
         assert 1 not in [row['index'] for row in b]
         assert a != b
+        assert alice.request('/recommend?strategy=exact')['recommendations'] == a
+        balanced = alice.request('/recommend?strategy=balanced')['recommendations']
+        assert len(balanced) == len({row['id'] for row in balanced}) == 20
+        assert not {0,2}.intersection(row['index'] for row in balanced)
+        assert [row['reason'] for row in balanced] == ['diversity_ranking'] * 19 + ['exploration']
+        assert alice.request('/recommend?strategy=balanced')['recommendations'] == balanced
+        for path in ['/recommend?strategy=unknown', '/recommend?strategy=', '/recommend?strategy=exact&strategy=balanced']:
+            try:
+                alice.request(path); raise AssertionError('Invalid strategy accepted')
+            except urllib.error.HTTPError as error: assert error.code == 400
+
         for body in [{'id':'unknown','action':'like'}, {'id':1,'action':'like'}, {'index':0,'action':'like'}, {'index':-1,'action':'like'}, {'id':IDS[0],'action':'bad'}, {'index':1.5,'action':'like'}, {'index':2**40,'action':'like'}]:
             try:
                 alice.request('/feedback', body); raise AssertionError('Invalid feedback accepted')
@@ -106,6 +117,7 @@ with tempfile.TemporaryDirectory() as temporary:
         assert alice.request('/status')['liked_indices'] == [0]
         assert bob.request('/status')['liked_indices'] == [1]
         assert alice.request('/recommend')['recommendations'] == a
+        assert alice.request('/recommend?strategy=balanced')['recommendations'] == balanced
         assert alice.request('/feedback', {'id':IDS[0],'action':'unlike'})['liked_count'] == 0
         assert alice.request('/feedback', {'id':IDS[0],'action':'unlike'})['liked_count'] == 0
         assert bob.request('/status')['liked_count'] == 1
