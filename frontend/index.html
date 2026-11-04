@@ -16,6 +16,14 @@
         </div>
     </div>
 
+    <div class="ranking-control">
+    <label for="rankingStrategy">Feed order</label>
+    <select id="rankingStrategy" onchange="getRecommendations()">
+        <option value="exact">Similarity</option>
+        <option value="balanced">Variety + exploration</option>
+    </select>
+    </div>
+
     <button class="refresh-btn" onclick="getRecommendations()" title="Refresh recommendations">
         ↻
     </button>

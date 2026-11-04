@@ -76,5 +76,13 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/script.js'), '
     assert.equal(elements.get('feedContainer').children[0].children[2].textContent, 'Ranked by similarity to your likes');
     vm.runInContext("appendCard({id:'unknown',reason:'<img src=x onerror=alert(1)>'})",context);
     assert.equal(elements.get('feedContainer').children[1].children.length,2);
+    elements.get('rankingStrategy').value = 'balanced';
+    context.fetch = async url => {
+        assert.equal(url, '/recommend?strategy=balanced');
+        return {ok:true,json:async()=>({recommendations:[{id:'variety',reason:'diversity_ranking'},{id:'explore',reason:'exploration'}]})};
+    };
+    await vm.runInContext('getRecommendations()',context);
+    assert.deepEqual(elements.get('feedContainer').children.map(card=>card.children[2].textContent),
+        ['Similarity with a variety adjustment','Explore another unseen item']);
     console.log('Frontend stable-ID image, like, unlike and visibility contracts passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -312,8 +312,11 @@ Each recommendation includes a stable `reason` code, displayed as a short captio
 Reasons describe the preference snapshot at retrieval. Liking a visible item
 changes future requests, not the reason that item originally appeared. Removing
 all likes returns subsequent requests to discovery. Unknown reason codes are
-not rendered. Per-item feature attribution, diversity reranking and deliberate
-exploration within personalized results remain future work requiring evaluation.
+not rendered. Per-item feature attribution remains future work.
+
+The **Feed order** selector also offers **Variety + exploration**, described in
+[balanced ranking](docs/balanced-ranking.md). This opt-in heuristic has separate
+`diversity_ranking` and `exploration` captions; similarity remains the default.
 
 ### Relevance evaluation
 

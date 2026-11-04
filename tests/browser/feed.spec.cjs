@@ -88,6 +88,11 @@ test('independent browser sessions, like/unlike and restart persistence', async 
     await expect(a.locator('.meme-card').first()).toBeVisible();
     await expect(a.locator('.recommendation-reason').first()).toHaveText('Ranked by similarity to your likes');
     await expect(b.locator('.recommendation-reason').first()).toHaveText('Explore the catalog · ordered for this session');
+    await a.getByLabel('Feed order').selectOption('balanced');
+    await expect(a.locator('.recommendation-reason').first()).toHaveText('Similarity with a variety adjustment');
+    await expect(a.getByText('Explore another unseen item', { exact: true })).toHaveCount(1);
+    await a.getByLabel('Feed order').selectOption('exact');
+    await expect(a.locator('.recommendation-reason').first()).toHaveText('Ranked by similarity to your likes');
     expect(errors).toEqual([]);
   } finally {
     await alice.close();
