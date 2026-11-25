@@ -327,3 +327,17 @@ to report Precision/Recall/nDCG/MRR at k with fixed query denominators and input
 hashes. Missing rankings receive zero credit. Synthetic tests verify the harness;
 representative permitted data and human judgments are still required to evaluate
 recommendation quality.
+
+### Preference cache coherence
+
+Each storage connection checks SQLite's data version before reusing cached
+preference vectors. A commit through another connection invalidates those derived
+vectors. Feedback acquires the database write transaction before reading current
+likes, including decisions that an event is a no-op; a `seen` event cannot overwrite
+a like based on stale cached state. Snapshot reads use a read transaction.
+
+The native regression suite exercises two independent connections to one local
+database, interleaved like/unlike/seen events, revocation and concurrent writes.
+This verifies storage coherence, not a distributed deployment: instances must use
+the same catalog, admission quotas remain process-local, and network filesystems
+and coordinated catalog rollout are not supported.
