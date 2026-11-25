@@ -44,6 +44,7 @@ private:
     State& load(const std::string& session);
     void execute(const char* sql);
     sqlite3* db_ = nullptr;
+    int data_version_ = -1;
     const Recommender& catalog_;
     const std::size_t max_sessions_;
     std::mutex mutex_;

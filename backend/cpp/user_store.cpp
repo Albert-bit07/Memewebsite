@@ -100,6 +100,15 @@ void UserStore::delete_session(const std::string& session) {
     states_.erase(session);
 }
 UserStore::State& UserStore::load(const std::string& session) {
+    // SQLite increments this connection-local value when another connection
+    // commits. Never reuse derived vectors across an external durable change.
+    Statement version(db_, "PRAGMA data_version");
+    if (!version.row()) throw std::runtime_error("Cannot read user storage version");
+    const int current_version = version.integer(0);
+    if (current_version != data_version_) {
+        states_.clear();
+        data_version_ = current_version;
+    }
     Statement exists(db_, "SELECT 1 FROM sessions WHERE token=? AND julianday(created_at)>julianday('now','-30 days')"); exists.bind(1,session);
     if (session.size() != 64 || !exists.row()) throw UnknownSession();
     auto found = states_.find(session);
@@ -121,20 +130,33 @@ UserStore::State& UserStore::load(const std::string& session) {
 }
 UserSnapshot UserStore::snapshot(const std::string& session) {
     std::lock_guard<std::mutex> guard(mutex_);
-    auto& state = load(session);
-    return {state.preference.vector(),state.liked,state.seen};
+    execute("BEGIN");
+    try {
+        auto& state = load(session);
+        UserSnapshot result{state.preference.vector(),state.liked,state.seen};
+        execute("COMMIT");
+        return result;
+    } catch (...) {
+        sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
+        throw;
+    }
 }
 std::size_t UserStore::feedback(const std::string& session, int index, const std::string& action) {
     if (index < 0 || index >= static_cast<int>(catalog_.get_ids().size()) ||
         (action != "like" && action != "unlike" && action != "seen" && action != "skip")) throw std::invalid_argument("Invalid item or action");
     std::lock_guard<std::mutex> guard(mutex_);
-    auto& state = load(session);
-    const bool was_liked = state.liked.count(index), was_seen = state.seen.count(index);
-    const bool liked = action == "like" || (was_liked && action != "unlike");
-    if (liked == was_liked && was_seen) return state.liked.size();
-    const auto& id = catalog_.get_ids()[index];
+    // Acquire the database write lock before reading preferences, including
+    // no-op decisions. A second worker cannot race the read/modify/write step.
     execute("BEGIN IMMEDIATE");
     try {
+        auto& state = load(session);
+        const bool was_liked = state.liked.count(index), was_seen = state.seen.count(index);
+        const bool liked = action == "like" || (was_liked && action != "unlike");
+        if (liked == was_liked && was_seen) {
+            execute("COMMIT");
+            return state.liked.size();
+        }
+        const auto& id = catalog_.get_ids()[index];
         Statement update(db_, "INSERT INTO preferences(session,item_id,liked,seen) VALUES(?,?,?,1) ON CONFLICT(session,item_id) DO UPDATE SET liked=excluded.liked,seen=1");
         update.bind(1,session); update.bind(2,id); update.bind(3,liked ? "1":"0"); update.row();
         Statement event(db_, "INSERT INTO feedback_events(session,item_id,action) VALUES(?,?,?)");
@@ -145,12 +167,12 @@ std::size_t UserStore::feedback(const std::string& session, int index, const std
                              "(SELECT id FROM feedback_events WHERE session=? ORDER BY id DESC LIMIT 1 OFFSET 1000)");
         prune.bind(1,session); prune.bind(2,session); prune.row();
         execute("COMMIT");
+        // Rebuild from durable state if allocation fails after commit.
+        try {
+            state.seen.insert(index);
+            if (liked && !was_liked) { state.liked.insert(index); state.preference.add(catalog_.get_embeddings()[index]); }
+            if (!liked && was_liked) { state.liked.erase(index); state.preference.remove(catalog_.get_embeddings()[index]); }
+            return state.liked.size();
+        } catch (...) { states_.erase(session); throw; }
     } catch (...) { sqlite3_exec(db_,"ROLLBACK",nullptr,nullptr,nullptr); throw; }
-    // Rebuild from durable state if allocation fails after commit.
-    try {
-        state.seen.insert(index);
-        if (liked && !was_liked) { state.liked.insert(index); state.preference.add(catalog_.get_embeddings()[index]); }
-        if (!liked && was_liked) { state.liked.erase(index); state.preference.remove(catalog_.get_embeddings()[index]); }
-        return state.liked.size();
-    } catch (...) { states_.erase(session); throw; }
 }
